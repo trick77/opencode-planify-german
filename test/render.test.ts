@@ -1,9 +1,10 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { resolve } from "node:path"
 import { dateiname, ladeSvg, pruefeSchreibweise, rendere, validiere, wurzel } from "../src/render.ts"
+import { baueOeffnenBefehl } from "../src/oeffnen.ts"
 
 const beispielPfad = resolve(wurzel, "skills/planify/references/beispiel-plan.json")
 const beispiel = () => JSON.parse(readFileSync(beispielPfad, "utf8"))
@@ -166,4 +167,59 @@ test("Web-Font-Import aus einem diagram-design-Export wird entfernt", () => {
   assert.doesNotMatch(html, /(?:href|src)\s*=\s*["']https?:/)
   assert.doesNotMatch(html, /url\(["']?https?:/)
   assert.ok(warnungen.some((w) => w.meldung.includes("Web-Font-Import")))
+})
+
+test("Plugin registriert das Tool plan_render", async () => {
+  // Given
+  const { PlanifyPlugin } = await import("../src/plugin.ts")
+
+  // When
+  const hooks = await PlanifyPlugin({} as never)
+
+  // Then
+  assert.ok(hooks.tool)
+  assert.deepEqual(Object.keys(hooks.tool), ["plan_render"])
+  assert.match(hooks.tool.plan_render.description, /Plan/)
+})
+
+test("Schema und Templates liegen unter der Paketwurzel", () => {
+  // Given / When / Then
+  assert.ok(existsSync(resolve(wurzel, "skills/planify/schema/plan.schema.json")))
+  assert.ok(existsSync(resolve(wurzel, "templates/plan.njk")))
+  assert.ok(existsSync(resolve(wurzel, "templates/theme.css")))
+})
+
+test("Öffnen-Kommando folgt der Plattform", () => {
+  // Given
+  const env = {}
+
+  // When / Then
+  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "darwin", env }), {
+    kommando: "open",
+    argumente: ["/x/plan.html"],
+  })
+  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "linux", env }), {
+    kommando: "xdg-open",
+    argumente: ["/x/plan.html"],
+  })
+  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "win32", env }), {
+    kommando: "cmd",
+    argumente: ["/c", "start", "", "/x/plan.html"],
+  })
+  assert.equal(baueOeffnenBefehl("/x/plan.html", { plattform: "sunos", env }), undefined)
+})
+
+test("openWith und PLANIFY_OPEN schlagen den Plattform-Standard", () => {
+  // Given
+  const env = { PLANIFY_OPEN: "chromium" }
+
+  // When / Then
+  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "darwin", env }), {
+    kommando: "chromium",
+    argumente: ["/x/plan.html"],
+  })
+  assert.deepEqual(
+    baueOeffnenBefehl("/x/plan.html", { openWith: "flatpak run org.mozilla.firefox", plattform: "linux", env }),
+    { kommando: "flatpak", argumente: ["run", "org.mozilla.firefox", "/x/plan.html"] },
+  )
 })

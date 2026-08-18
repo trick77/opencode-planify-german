@@ -62,7 +62,7 @@ gilt für neuen Code; in bestehenden Dateien der dortigen Konvention folgen.
 
 Einen Plan gibst du ausschliesslich als JSON aus und übergibst ihn dem Tool
 `plan_render`. Das Tool validiert, schreibt `docs/plans/<TICKET>-<slug>.plan.json`
-und die gerenderte HTML-Datei und öffnet sie in Safari.
+und die gerenderte HTML-Datei und öffnet sie im Standard-Browser.
 
 Nie selbst HTML oder Markdown für einen Plan schreiben, nie den Plan als
 Fliesstext in den Chat legen, nie eine Plan-Datei mit `write` oder `edit`
