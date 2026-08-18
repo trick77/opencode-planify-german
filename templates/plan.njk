@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ plan.ticket }} — {{ plan.title }}</title>
+<style>
+{{ css | safe }}
+</style>
+</head>
+<body>
+<main class="blatt">
+{% include "partials/kopf.njk" %}
+{% include "partials/kontext.njk" %}
+{% include "partials/diagramm.njk" %}
+{% include "partials/schritte.njk" %}
+{% include "partials/verifikation.njk" %}
+{% include "partials/risiken.njk" %}
+{% include "partials/entscheidungen.njk" %}
+{% include "partials/ausserhalb.njk" %}
+{% include "partials/fuss.njk" %}
+</main>
+</body>
+</html>

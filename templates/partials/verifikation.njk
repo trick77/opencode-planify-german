@@ -1,0 +1,13 @@
+<section>
+  <h2>Verifikation</h2>
+  <div class="tabelle-huelle">
+    <table>
+      <thead><tr><th>Vorgehen</th><th>Erwartung</th></tr></thead>
+      <tbody>
+        {% for eintrag in plan.verification %}
+        <tr><td><code>{{ eintrag.how }}</code></td><td>{{ eintrag.expected }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

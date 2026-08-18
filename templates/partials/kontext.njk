@@ -1,0 +1,15 @@
+{% if plan.context %}
+<section>
+  <h2>Kontext</h2>
+  <div class="kontext">
+    <div class="karte">
+      <div class="etikett">Problem</div>
+      <p>{{ plan.context.problem }}</p>
+    </div>
+    <div class="karte">
+      <div class="etikett">Ergebnis</div>
+      <p>{{ plan.context.outcome }}</p>
+    </div>
+  </div>
+</section>
+{% endif %}

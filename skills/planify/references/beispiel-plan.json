@@ -1,0 +1,53 @@
+{
+  "ticket": "SEP-24758",
+  "slug": "mapstruct-gradle-migration",
+  "title": "MapStruct-Mapper auf Gradle-Annotation-Processing umstellen",
+  "intent": "Die MapStruct-Mapper werden heute über ein selbstgebautes Maven-Profil generiert, das im Gradle-Build fehlt. Der Plan verlagert die Generierung in die Gradle-Konfiguration, damit beide Builds identische Mapper erzeugen und der CI-Lauf reproduzierbar bleibt.",
+  "context": {
+    "problem": "Im Gradle-Build fehlt der Annotation-Processor, deshalb schlagen die Mapper-Tests nur dort fehl.",
+    "outcome": "Ein Build-Pfad, identische generierte Mapper, grüner CI-Lauf ohne manuelle Schritte."
+  },
+  "steps": [
+    {
+      "title": "Annotation-Processor in Gradle registrieren",
+      "rationale": "Ohne Registrierung erzeugt Gradle keine Implementierungsklassen; der Compile-Fehler entsteht erst im Test.",
+      "files": [
+        { "path": "build.gradle.kts", "change": "MapStruct als annotationProcessor und compileOnly ergänzen, Version aus dem Versions-Katalog beziehen." },
+        { "path": "gradle/libs.versions.toml", "change": "Eintrag mapstruct = \"1.6.3\" und Bibliotheks-Aliasse mapstruct-core sowie mapstruct-processor anlegen." }
+      ],
+      "commands": ["./gradlew :domain:compileJava --rerun-tasks"]
+    },
+    {
+      "title": "Generierte Mapper aus dem Repository entfernen",
+      "rationale": "Eingecheckte Generate wandern bei jedem Lauf auseinander und verdecken echte Abweichungen.",
+      "files": [
+        { "path": "domain/src/main/java/ch/example/mapper/SchadenmeldungMapperImpl.java", "change": "Datei löschen, sie wird künftig generiert." },
+        { "path": ".gitignore", "change": "Pfad build/generated/sources/annotationProcessor ergänzen." }
+      ]
+    },
+    {
+      "title": "Maven-Profil zurückbauen",
+      "files": [
+        { "path": "pom.xml", "change": "Das Profil mapstruct-gen entfernen und den Processor in die reguläre Compiler-Konfiguration ziehen." }
+      ]
+    }
+  ],
+  "verification": [
+    { "how": "./gradlew clean test", "expected": "Alle Mapper-Tests grün, keine fehlenden Implementierungsklassen." },
+    { "how": "mvn -q verify", "expected": "Maven erzeugt dieselben Mapper wie Gradle, Testergebnis identisch." },
+    { "how": "git status", "expected": "Keine generierten Java-Dateien mehr im Arbeitsbaum." }
+  ],
+  "risks": [
+    { "risk": "Abweichende MapStruct-Version zwischen Maven und Gradle erzeugt unterschiedliche Mapper.", "mitigation": "Version an einer Stelle im Versions-Katalog führen und in der pom.xml als Property daraus spiegeln." }
+  ],
+  "openDecisions": [
+    { "question": "Bleibt der Maven-Build langfristig erhalten?", "recommendation": "Vorläufig behalten, bis die Release-Pipeline auf Gradle steht.", "tradeoff": "Doppelte Pflege der Prozessor-Konfiguration gegen einen risikolosen Umstieg in zwei Schritten." }
+  ],
+  "outOfScope": ["Umstellung der Release-Pipeline", "Aktualisierung weiterer Annotation-Processoren"],
+  "meta": {
+    "createdAt": "2026-08-18T10:00:00Z",
+    "model": "beispiel",
+    "branch": "feature/SEP-24758-mapstruct-gradle-migration",
+    "repo": "planify-demo"
+  }
+}

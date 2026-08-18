@@ -1,0 +1,24 @@
+<section>
+  <h2>Schritte</h2>
+  <ol class="schritte">
+    {% for schritt in plan.steps %}
+    <li class="schritt">
+      <h3>{{ schritt.title }}</h3>
+      {% if schritt.rationale %}<p class="begruendung">{{ schritt.rationale }}</p>{% endif %}
+      <ul class="dateien">
+        {% for datei in schritt.files %}
+        <li>
+          <span class="pfad">{{ datei.path }}</span>
+          <span class="aenderung">{{ datei.change }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if schritt.commands and schritt.commands | length %}
+      <ul class="kommandos">
+        {% for kommando in schritt.commands %}<li>{{ kommando }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>

@@ -1,0 +1,12 @@
+<header class="kopf">
+  <div class="marke">Plan</div>
+  <h1>{{ plan.title }}</h1>
+  <div class="ticket">{{ plan.ticket }}</div>
+  <div class="kopfzeilen">
+    <span>{{ plan.meta.createdAt | datum }}</span>
+    {% if plan.meta.branch %}<span>Branch: {{ plan.meta.branch }}</span>{% endif %}
+    {% if plan.meta.repo %}<span>Repo: {{ plan.meta.repo }}</span>{% endif %}
+    <span>{{ plan.steps | length }} Schritte</span>
+  </div>
+  <p class="intent">{{ plan.intent }}</p>
+</header>

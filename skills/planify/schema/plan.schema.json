@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://planify.local/plan.schema.json",
+  "title": "Planify Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticket", "slug", "title", "intent", "steps", "verification", "meta"],
+  "properties": {
+    "ticket": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$",
+      "description": "Ticket-Key aus dem Branch, z. B. SEP-24758"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+      "maxLength": 60,
+      "description": "Kurzer Titel in Kebab-Case, ASCII, keine Umlaute (Dateiname)"
+    },
+    "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+    "intent": {
+      "type": "string",
+      "minLength": 40,
+      "description": "Ein Absatz: was gemacht wird und warum"
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem", "outcome"],
+      "properties": {
+        "problem": { "type": "string", "minLength": 10 },
+        "outcome": { "type": "string", "minLength": 10 }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "files"],
+        "properties": {
+          "title": { "type": "string", "minLength": 3 },
+          "rationale": { "type": "string" },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "change"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "change": { "type": "string", "minLength": 5 }
+              }
+            }
+          },
+          "commands": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "verification": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["how", "expected"],
+        "properties": {
+          "how": { "type": "string", "minLength": 3 },
+          "expected": { "type": "string", "minLength": 3 }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["risk", "mitigation"],
+        "properties": {
+          "risk": { "type": "string", "minLength": 5 },
+          "mitigation": { "type": "string", "minLength": 5 }
+        }
+      }
+    },
+    "openDecisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "recommendation", "tradeoff"],
+        "properties": {
+          "question": { "type": "string", "minLength": 5 },
+          "recommendation": { "type": "string", "minLength": 3 },
+          "tradeoff": { "type": "string", "minLength": 5 }
+        }
+      }
+    },
+    "outOfScope": { "type": "array", "items": { "type": "string" } },
+    "diagram": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "svgPath"],
+      "properties": {
+        "title": { "type": "string", "minLength": 3 },
+        "caption": { "type": "string" },
+        "svgPath": {
+          "type": "string",
+          "pattern": "\\.svg$",
+          "description": "Lokaler Pfad zur SVG-Datei, wird inline eingebettet"
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createdAt"],
+      "properties": {
+        "createdAt": { "type": "string", "format": "date-time" },
+        "model": { "type": "string" },
+        "branch": { "type": "string" },
+        "repo": { "type": "string" }
+      }
+    }
+  }
+}

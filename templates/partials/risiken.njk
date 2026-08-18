@@ -1,0 +1,15 @@
+{% if plan.risks and plan.risks | length %}
+<section>
+  <h2>Risiken</h2>
+  <div class="tabelle-huelle">
+    <table>
+      <thead><tr><th>Risiko</th><th>Gegenmassnahme</th></tr></thead>
+      <tbody>
+        {% for eintrag in plan.risks %}
+        <tr><td>{{ eintrag.risk }}</td><td>{{ eintrag.mitigation }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
