@@ -13,7 +13,7 @@ Der Plan ist Inhalt, nicht Layout. Du lieferst ausschliesslich JSON, das Layout
 kommt aus dem Nunjucks-Template. Ausgabeweg ist immer das Tool `plan_render`:
 es validiert gegen `schema/plan.schema.json`, schreibt
 `docs/plans/<TICKET>-<slug>.plan.json` und `<TICKET>-<slug>.html` und öffnet die
-HTML-Datei in Safari.
+HTML-Datei im Standard-Browser des Systems.
 
 Nie selbst HTML oder Markdown für einen Plan schreiben. Nie eine Plan-Datei mit
 `write` oder `edit` anlegen. Kommen Schemafehler zurück, wurde nichts

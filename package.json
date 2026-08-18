@@ -1,12 +1,45 @@
 {
+  "$schema": "https://json.schemastore.org/package.json",
   "name": "planify",
   "version": "0.1.0",
-  "private": true,
+  "description": "OpenCode plugin: Pläne als JSON, lokal zu eigenständigem HTML gerendert (Nunjucks), optional mit inline eingebettetem Diagramm",
   "type": "module",
-  "description": "JSON-Plaene fuer OpenCode, gerendert mit Nunjucks",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src/",
+    "templates/",
+    "skills/",
+    "instructions/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "render": "node src/cli.ts",
     "test": "node --test test/*.test.ts"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "plan",
+    "planning",
+    "nunjucks",
+    "diagram",
+    "de-ch"
+  ],
+  "author": "trick77 (https://github.com/trick77)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trick77/planify.git"
+  },
+  "homepage": "https://github.com/trick77/planify#readme",
+  "bugs": {
+    "url": "https://github.com/trick77/planify/issues"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.18",
