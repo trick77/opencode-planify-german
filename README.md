@@ -8,6 +8,40 @@ MCP-Server. Nur OpenCode.
 Das Layout ist festverdrahtet, das Modell liefert nur Inhalt: deshalb sieht jeder
 Plan gleich aus, und das JSON daneben bleibt maschinenlesbar.
 
+## Warum
+
+**JSON statt HTML, weil Markup Tokens kostet.** Schreibt das Modell das HTML
+selbst, erzeugt es bei jedem Plan dieselbe Struktur neu — Kopf, Tabellen,
+verschachtelte Listen, Stilangaben. Das sind Tokens für Tags statt für Inhalt.
+JSON trägt nur die Aussagen, die Form kommt aus dem Template, das lokal liegt und
+nichts kostet. Und was nicht jedes Mal neu erfunden wird, geht auch nicht jedes
+Mal anders kaputt: fehlt ein Feld, weist die Schema-Prüfung den Plan ab, statt
+ihn hübsch formatiert auszuliefern.
+
+**HTML statt Markdown oder CLI-Text, weil ein Plan gelesen wird.** Er ist kein
+Logeintrag zum Überfliegen, sondern ein Dokument, dem man zustimmt oder
+widerspricht. In HTML zeigt die Form die Struktur: Schritte als nummerierte
+Karten, Pfad und Änderung nebeneinander, offene Entscheidungen hervorgehoben
+statt im Fliesstext begraben. Sternchen, Pipe-Tabellen und wegscrollender
+Harness-Output lassen den Leser die Struktur selbst zusammensetzen — Arbeit, die
+beim Prüfen nicht zusätzlich anfallen soll.
+
+**Der Plan liegt beim Code, weil Reviewer die Absicht sonst rekonstruieren
+müssen.** Ein Diff zeigt, was geändert wurde, nicht wozu. Liegt der Plan im Pull
+Request, sieht der Kollege die Grundlage der Änderung — Problem, Schritte,
+Verifikation, offene Entscheidungen — und muss sie nicht aus dem Diff und der
+Commit-Message zusammenreimen. Das beantwortet auch die Frage, die bei
+agentengeschriebenem Code zuerst kommt: was war eigentlich der Auftrag.
+
+**Deutsch, weil die Muttersprache schneller und tiefer verarbeitet wird.** In der
+Erstsprache läuft das Lesen automatisch ab, in einer Zweitsprache bindet das
+Entschlüsseln Aufmerksamkeit — die beim Prüfen anderswo gebraucht wird: trifft
+der Schritt das Problem, stimmt die Reihenfolge, geht eine Zusage zu weit. Dazu
+die Feinauflösung: der Unterschied zwischen "muss", "soll" und "kann", zwischen
+"nur" und "auch" springt in der Muttersprache sofort ins Auge, in der
+Zweitsprache oft erst beim zweiten Lesen — und das findet unter Zeitdruck nicht
+statt. Ein Plan wird einmal gelesen und dann umgesetzt.
+
 ## Bestandteile
 
 | Teil | Datei | Wirkung |
