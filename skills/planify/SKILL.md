@@ -70,7 +70,7 @@ Ablauf, wenn ein Diagramm sinnvoll ist:
 
 1. Skill `diagram-design` laden und das Diagramm als HTML erzeugen.
 2. Daraus ein `.svg` exportieren, nach dem Verfahren in
-   `references/export.md` der Skill `diagram-design` (Abschnitt "SVG export
+   `references/export.md` des Skills `diagram-design` (Abschnitt "SVG export
    procedure"): erstes `<svg>`-Element extrahieren, `xmlns` und `viewBox`
    sicherstellen, `title`/`desc` erhalten. Nur SVG, kein PNG — Playwright wird
    nicht gebraucht.

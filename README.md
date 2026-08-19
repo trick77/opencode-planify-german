@@ -26,7 +26,7 @@ npx opencode-presets install opencode-planify-german
 ```
 
 Das Bundle installiert die drei Teile zusammen: das Plugin mit dem Tool
-`plan_render` (gepinnt), die Regeldatei nach `instructions` und die Skill nach
+`plan_render` (gepinnt), die Regeldatei nach `instructions` und den Skill nach
 `skills.paths`. Einzeln bringt keiner davon etwas — die Regeln nennen sonst ein
 Tool, das es nicht gibt, und das Plugin wird nie aufgerufen.
 
@@ -69,12 +69,12 @@ Optional und nur, wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt:
 Abhängigkeiten, Datenfluss, Zustände, Reihenfolgen mit Verzweigungen. Eine
 lineare Schrittfolge wird aufgezählt, nicht gezeichnet.
 
-Erzeugt wird es mit der Skill `diagram-design`, als SVG exportiert, der Pfad
+Erzeugt wird es mit dem Skill `diagram-design`, als SVG exportiert, der Pfad
 steht im Plan unter `diagram.svgPath`. planify bettet das SVG inline ein und
 entfernt dabei `script`, `on*`-Attribute und den Google-Fonts-Import, damit die
 Plan-Datei offline-fest bleibt.
 
-Auch die Skill kommt über ein Preset. Sie liegt in einem fremden Repo ohne Tags,
+Auch der Skill kommt über ein Preset. Er liegt in einem fremden Repo ohne Tags,
 deshalb klonst du selbst und gibst den Pfad mit:
 
 ```sh
@@ -82,5 +82,5 @@ git clone https://github.com/cathrynlavery/diagram-design.git
 npx opencode-presets install skill-diagram-design --set skillsDir="$PWD/diagram-design/skills"
 ```
 
-Ohne diese Skill bleibt `diagram` einfach weg — handgeschriebene SVG oder
+Ohne diesen Skill bleibt `diagram` einfach weg — handgeschriebene SVG oder
 Mermaid-Blöcke gehören nicht in den Plan.
