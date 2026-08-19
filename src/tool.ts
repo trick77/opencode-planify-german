@@ -11,7 +11,7 @@ const z = tool.schema
 // Diese zod-Form beschreibt dem Modell nur die Struktur.
 const datei = z.object({
   path: z.string().describe("Pfad relativ zum Projekt, z. B. src/render.ts"),
-  change: z.string().describe("Was genau geändert wird, ein Satz"),
+  change: z.string().describe("Was in dieser Datei passiert, ein Satz"),
 })
 
 const planForm = z.object({
@@ -22,12 +22,12 @@ const planForm = z.object({
   context: z
     .object({ problem: z.string(), outcome: z.string() })
     .optional()
-    .describe("Problem und angestrebtes Ergebnis"),
+    .describe("problem: was heute schiefgeht. outcome: Zustand nach der Umsetzung"),
   steps: z
     .array(
       z.object({
         title: z.string(),
-        rationale: z.string().optional().describe("Warum dieser Schritt nötig ist"),
+        rationale: z.string().optional().describe("Warum der Schritt nötig ist. Nur wenn nicht offensichtlich"),
         files: z.array(datei).describe("Mindestens eine Datei mit exaktem Pfad"),
         commands: z.array(z.string()).optional(),
       }),
@@ -35,17 +35,17 @@ const planForm = z.object({
     .describe("Umsetzungsschritte in Reihenfolge"),
   verification: z
     .array(z.object({ how: z.string(), expected: z.string() }))
-    .describe("Wie wird Ende zu Ende geprüft, und was ist zu erwarten"),
+    .describe("Ende-zu-Ende-Prüfung: how (Kommando oder Handgriff), expected (woran man Erfolg erkennt)"),
   risks: z.array(z.object({ risk: z.string(), mitigation: z.string() })).optional(),
   openDecisions: z
     .array(z.object({ question: z.string(), recommendation: z.string(), tradeoff: z.string() }))
     .optional()
-    .describe("Offene Entscheidungen des Benutzers, mit Empfehlung und Abwägung"),
+    .describe("Offene Entscheidungen des Benutzers, mit Empfehlung und Abwägung. Nie still im Text entscheiden"),
   outOfScope: z.array(z.string()).optional(),
   diagram: z
     .object({ title: z.string(), caption: z.string().optional(), svgPath: z.string() })
     .optional()
-    .describe("Nur wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt. SVG via Skill diagram-design erzeugen, Pfad hier eintragen; es wird inline eingebettet."),
+    .describe("Nur wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt. SVG per Skill diagram-design erzeugen, Pfad hier eintragen, wird inline eingebettet"),
   meta: z
     .object({
       createdAt: z.string().describe("ISO-8601 Zeitstempel"),
@@ -68,12 +68,12 @@ export type ToolOptionen = {
 export function erstellePlanRenderTool(optionen: ToolOptionen = {}) {
   return tool({
   description:
-    "Rendert einen Plan aus JSON zu einer eigenständigen HTML-Datei (Nunjucks-Template) und öffnet sie im Standard-Browser. " +
-    "Der einzige zulässige Weg, einen Plan auszugeben: niemals HTML oder Markdown selbst schreiben. " +
-    "Ist der Plan nicht schemakonform, wird nichts geschrieben und die Feldfehler kommen zurück — dann korrigieren und erneut aufrufen. " +
-    "Details zu Feldern und Schreibregeln: Skill \"planify\".",
+    "Rendert einen Plan aus JSON zu einer eigenständigen HTML-Datei und öffnet sie im Standard-Browser. " +
+    "Einziger Weg, einen Plan auszugeben: nie HTML oder Markdown selbst schreiben. " +
+    "Nicht schemakonform → nichts geschrieben, Feldfehler kommen zurück, korrigieren und erneut aufrufen. " +
+    "Felder und Schreibregeln: Skill \"planify\".",
   args: {
-    plan: planForm.describe("Der vollständige Plan. Feldnamen englisch, Inhalte deutsch."),
+    plan: planForm.describe("Vollständiger Plan. Feldnamen englisch, Inhalte deutsch"),
     outDir: z
       .string()
       .optional()
