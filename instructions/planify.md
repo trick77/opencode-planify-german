@@ -67,11 +67,11 @@ Plan-Modus und in jedem Projekt.
   nicht auf ein anderes Ausgabeformat ausweichen.
 - `ticket`: aus dem Branch (`git rev-parse --abbrev-ref HEAD`), erster Treffer von
   `[A-Z][A-Z0-9]+-[0-9]+`. `feature/SEP-24758-plan-und-auswirkung` → `SEP-24758`.
-  Kein Treffer → Benutzer nach dem Ticket-Key fragen, nicht raten, nicht weglassen.
+  Kein Treffer → im Chat nach dem Ticket-Key fragen, nicht raten, nicht weglassen.
 - `slug`: Kurztitel in Kebab-Case, ASCII ohne Umlaute — er bildet nur den
   Dateinamen.
 - Offene Entscheidungen nach `openDecisions`, mit Empfehlung und Abwägung. Still
-  im Text entschieden heisst: der Benutzer konnte nicht entscheiden.
+  im Text entschieden heisst: die Wahl wurde nie zur Wahl gestellt.
 - Diagramm nur, wenn es Struktur zeigt, die die Prosa nicht trägt:
   Abhängigkeiten, Datenfluss, Zustände, Reihenfolgen mit Verzweigungen. Lineare
   Schrittfolge wird aufgezählt, nicht gezeichnet. Wenn Diagramm: Skill

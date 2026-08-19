@@ -5,34 +5,19 @@ rendert daraus eine eigenständige HTML-Datei und öffnet sie im Standard-Browse
 des Systems. Pläne sind deutsch, in Schweizer Rechtschreibung mit echten
 Umlauten. Läuft lokal in OpenCode, als Plugin plus Skill.
 
-Das Layout ist festverdrahtet, das Modell liefert nur Inhalt: deshalb sieht jeder
-Plan gleich aus, und das JSON daneben bleibt maschinenlesbar.
+Das Layout steht im Template, das Modell liefert nur Inhalt: gleiche Gliederung
+und gleiche Darstellung in jedem Plan, dazu das JSON daneben als
+maschinenlesbare Fassung.
 
 ## Warum
 
-**Günstiger pro Plan.** Das Modell erzeugt nur die Aussagen, die Form kommt aus
-dem Template auf deiner Platte. Die Tokens gehen in den Inhalt, nicht in Tags,
-die sich von Plan zu Plan ohnehin nie ändern.
-
-**Verlässliche Struktur.** Der Plan wird gegen ein Schema geprüft, bevor etwas
-geschrieben wird: fehlt die Verifikation oder ein Dateipfad, kommt der Plan mit
-Feldfehlern zurück und das Modell zieht nach.
-
-**Schneller zu prüfen.** Schritte stehen als nummerierte Karten, Pfad und
-Änderung nebeneinander, offene Entscheidungen mit Empfehlung und Abwägung
-hervorgehoben. Du siehst in Sekunden, welche Dateien angefasst werden und woran
-Erfolg gemessen wird.
-
-**Kontext im Pull Request.** Der Plan liegt als HTML und als JSON in
-`docs/plans/` und geht mit dem Code ins Review. Der Kollege sieht Problem,
-Schritte und Verifikation, statt die Absicht aus dem Diff zu erschliessen — bei
-agentengeschriebenem Code die erste Frage.
-
-**Deutsch liest sich schneller und genauer.** In der Muttersprache läuft das
-Lesen automatisch ab, die Aufmerksamkeit bleibt für die inhaltlichen Fragen frei:
-trifft der Schritt das Problem, stimmt die Reihenfolge, geht eine Zusage zu weit.
-Der Unterschied zwischen "muss", "soll" und "kann" fällt beim ersten Lesen auf —
-und ein zweites Lesen findet unter Zeitdruck selten statt.
+| Was du davon hast | Warum |
+| --- | --- |
+| **Günstiger pro Plan** | Tokens gehen in den Inhalt, nicht in Tags. Die Form kommt aus dem lokal installierten Template. |
+| **Verlässliche Struktur** | Schema-Prüfung, bevor etwas geschrieben wird: fehlende Verifikation oder ein unklarer Dateipfad kommen als Feldfehler zurück. |
+| **Schneller zu prüfen** | Nummerierte Schritte, Pfad und Änderung nebeneinander, offene Entscheidungen mit Empfehlung und Abwägung hervorgehoben. |
+| **Kontext im Review** | Plan als HTML und JSON in `docs/plans/`, geht mit dem Code in den Pull Request. Die Absicht steht im Review, statt aus dem Diff erschlossen zu werden. |
+| **Deutsch** | Muttersprache liest sich schneller, die Aufmerksamkeit bleibt beim Inhalt. Der Unterschied zwischen "muss", "soll" und "kann" fällt beim ersten Lesen auf. |
 
 ## Bestandteile
 
