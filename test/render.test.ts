@@ -48,6 +48,8 @@ test("Dark Mode haengt an der Systemeinstellung, der Ausdruck bleibt hell", () =
   assert.doesNotMatch(html, /<script|<input/)
   // die Dark-Media-Query steht vor dem Druckblock, sonst gewinnt sie beim Ausdruck
   assert.ok(html.indexOf("prefers-color-scheme: dark") < html.indexOf("@media print"))
+  // der Plan selbst sagt, woher die Darstellung kommt
+  assert.match(html, /hell\/dunkel: Systemeinstellung/)
 })
 
 test("unvollständiger Plan liefert Feldfehler statt HTML", () => {

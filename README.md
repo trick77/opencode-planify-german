@@ -72,17 +72,6 @@ Geöffnet wird mit dem Standard-Handler des Systems: `open` auf macOS,
 Plugin-Option `openWith` oder die Umgebungsvariable `PLANIFY_OPEN`. `plan_render`
 mit `open: false` schreibt die Dateien, ohne etwas zu öffnen.
 
-## Light Mode und Dark Mode
-
-Die Systemeinstellung entscheidet: `@media (prefers-color-scheme: dark)` in
-`templates/theme.css` überschreibt die Farb-Token, die Layoutregeln stehen nur
-einmal. Kein Schalter im Dokument, kein Skript — die Plan-Datei bleibt passiv und
-offline-fest, und ein Default liesse sich mit einem Schalter ohnehin nicht setzen.
-Der Ausdruck ist immer im Light Mode, auch aus dem Dark Mode heraus.
-
-Eingebettete SVG-Diagramme bringen eigene Farben mit; ihre Fläche bleibt deshalb
-in beiden Modi hell.
-
 ## Diagramme
 
 Optional, für Struktur, die die Prosa nicht trägt: Abhängigkeiten, Datenfluss,
