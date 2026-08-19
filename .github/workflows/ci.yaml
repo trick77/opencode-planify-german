@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+
+  # Der Renderer ist das Herz des Pakets: läuft er auf dem Beispielplan durch,
+  # sind Schema, Template und SVG-Einbettung als Ganzes bedient. Die Prüfungen
+  # danach fangen genau die Regressionen, die Unit-Tests nicht sehen: eine
+  # entfernte Ressource im HTML, ein Eszett, eine ASCII-Umschreibung.
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Beispielplan rendern
+        run: npm run render -- skills/planify/references/beispiel-plan.json --out /tmp/planify-ci
+
+      - name: HTML ist eigenständig, keine entfernten Ressourcen
+        run: |
+          html=/tmp/planify-ci/SEP-24758-mapstruct-gradle-migration.html
+          test -s "$html"
+          if grep -Eq '(href|src)[[:space:]]*=[[:space:]]*"https?:' "$html"; then
+            echo "entfernte Ressource im gerenderten Plan" >&2
+            grep -Eo '(href|src)[[:space:]]*=[[:space:]]*"https?:[^"]*"' "$html" >&2
+            exit 1
+          fi
+
+      - name: Schweizer Rechtschreibung, echte Umlaute
+        run: |
+          html=/tmp/planify-ci/SEP-24758-mapstruct-gradle-migration.html
+          if grep -q 'ß' "$html"; then
+            echo "Eszett im gerenderten Plan, erwartet ist ss" >&2
+            exit 1
+          fi
+          # Der Renderer meldet ASCII-Umschreibungen als Warnung auf stderr;
+          # im mitgelieferten Beispielplan darf keine einzige auftreten.
+          npm run --silent render -- skills/planify/references/beispiel-plan.json --out /tmp/planify-ci 2>&1 \
+            | tee /tmp/planify-ci/warnungen.txt
+          if grep -q 'Warnung' /tmp/planify-ci/warnungen.txt; then
+            echo "Beispielplan erzeugt Warnungen zur Schreibweise" >&2
+            exit 1
+          fi

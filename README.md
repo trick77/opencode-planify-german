@@ -1,8 +1,12 @@
-# planify
+# opencode-planify-german
 
-Pläne für OpenCode: das Modell liefert JSON, planify rendert daraus eine
-eigenständige HTML-Datei (Nunjucks) und öffnet sie im Standard-Browser des
-Systems. Kein MCP-Server. Nur OpenCode.
+Pläne für OpenCode: das Modell liefert JSON, ein lokales Nunjucks-Template
+rendert daraus eine eigenständige HTML-Datei und öffnet sie im Standard-Browser
+des Systems. Pläne sind deutsch, mit echten Umlauten und ohne Eszett. Kein
+MCP-Server. Nur OpenCode.
+
+Das Layout ist festverdrahtet, das Modell liefert nur Inhalt: deshalb sieht jeder
+Plan gleich aus, und das JSON daneben bleibt maschinenlesbar.
 
 ## Bestandteile
 
@@ -15,75 +19,68 @@ Systems. Kein MCP-Server. Nur OpenCode.
 
 ## Installation
 
-In `~/.config/opencode/opencode.json`:
+Über [opencode-presets](https://github.com/trick77/opencode-presets):
 
-```json
-{
-  "plugin": ["planify@git+https://github.com/trick77/planify.git#v0.1.0"],
-  "instructions": ["/pfad/zu/planify/instructions/planify.md"],
-  "skills": { "paths": ["/pfad/zu/planify/skills"] }
-}
+```sh
+npx opencode-presets install opencode-planify-german
 ```
 
-Das Plugin bringt das Tool mit, `instructions` macht die Regeln verbindlich,
-`skills.paths` liefert die Detaildokumentation. Instructions und Skill brauchen
-einen Pfad auf der Platte — entweder aus einem Clone dieses Repos oder aus dem
-Preset `planify` von
-[opencode-presets](https://github.com/trick77/opencode-presets), das die Dateien
-gepinnt in den Cache holt.
+Das Bundle installiert die drei Teile zusammen: das Plugin mit dem Tool
+`plan_render` (gepinnt), die Regeldatei nach `instructions` und die Skill nach
+`skills.paths`. Einzeln bringt keiner davon etwas — die Regeln nennen sonst ein
+Tool, das es nicht gibt, und das Plugin wird nie aufgerufen.
 
 Prüfen:
 
-```
+```sh
 opencode debug agent plan | grep plan_render
 opencode debug skill | grep planify
 ```
 
-### Alternative ohne Plugin
+Deinstallieren:
 
-Statt des `plugin`-Eintrags lässt sich das Tool auch als Datei registrieren:
-
-```
-ln -sfn "$PWD/tools/plan.ts" ~/.config/opencode/tool/plan.ts
+```sh
+npx opencode-presets remove opencode-planify-german
 ```
 
-Der Tool-Name entsteht aus Dateiname plus Export: `plan.ts` mit
-`export const render` ergibt `plan_render`.
+## Ablauf
+
+1. Die Regeldatei ist in jeder Session geladen und verlangt: Plan als JSON, kein
+   handgeschriebenes HTML oder Markdown.
+2. Das Ticket kommt aus dem Branch (`git rev-parse --abbrev-ref HEAD`, Muster
+   `[A-Z][A-Z0-9]+-[0-9]+`). Kein Treffer → das Modell fragt nach.
+3. Das JSON geht an `plan_render`. Verletzt es das Schema, wird nichts
+   geschrieben und die Feldfehler kommen zurück; das Modell korrigiert selbst.
+4. Eszett und ASCII-Umschreibungen von Umlauten in Prosafeldern kommen als
+   Warnung zurück. Pfade, Kommandos und der Slug sind ausgenommen.
+5. Geschrieben werden `docs/plans/<TICKET>-<slug>.plan.json` und `.html`, dann
+   öffnet die Datei.
 
 ## Browser
 
 Geöffnet wird mit dem Standard-Handler des Systems: `open` auf macOS,
 `xdg-open` auf Linux, `start` auf Windows. Überschreiben geht über die
-Plugin-Option `openWith` oder die Umgebungsvariable `PLANIFY_OPEN`:
-
-```json
-{ "plugin": [["planify@git+https://github.com/trick77/planify.git#v0.1.0", { "openWith": "firefox" }]] }
-```
-
-`plan_render` mit `open: false` schreibt die Dateien, ohne etwas zu öffnen.
+Plugin-Option `openWith` oder die Umgebungsvariable `PLANIFY_OPEN`. `plan_render`
+mit `open: false` schreibt die Dateien, ohne etwas zu öffnen.
 
 ## Diagramme
 
-Optional und nur, wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt.
+Optional und nur, wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt:
+Abhängigkeiten, Datenfluss, Zustände, Reihenfolgen mit Verzweigungen. Eine
+lineare Schrittfolge wird aufgezählt, nicht gezeichnet.
+
 Erzeugt wird es mit der Skill `diagram-design`, als SVG exportiert, der Pfad
-steht in `diagram.svgPath`. planify bettet das SVG inline ein und entfernt dabei
-`script`, `on*`-Attribute und den Google-Fonts-Import, damit die Plan-Datei
-offline-fest bleibt.
+steht im Plan unter `diagram.svgPath`. planify bettet das SVG inline ein und
+entfernt dabei `script`, `on*`-Attribute und den Google-Fonts-Import, damit die
+Plan-Datei offline-fest bleibt.
 
-Installation der Skill für OpenCode:
+Auch die Skill kommt über ein Preset. Sie liegt in einem fremden Repo ohne Tags,
+deshalb klonst du selbst und gibst den Pfad mit:
 
-```
+```sh
 git clone https://github.com/cathrynlavery/diagram-design.git
-ln -sfn "$PWD/diagram-design/skills/diagram-design" ~/.config/opencode/skills/diagram-design
+npx opencode-presets install skill-diagram-design --set skillsDir="$PWD/diagram-design/skills"
 ```
 
-## Entwicklung
-
-```
-npm test
-npm run render -- skills/planify/references/beispiel-plan.json --out /tmp/planify-test
-```
-
-Läuft mit Node (Type-Stripping), Bun wird nicht gebraucht. Der Renderer warnt
-bei Eszett und bei ASCII-Umschreibungen von Umlauten in Prosafeldern; Pfade,
-Kommandos und der Slug sind davon ausgenommen.
+Ohne diese Skill bleibt `diagram` einfach weg — handgeschriebene SVG oder
+Mermaid-Blöcke gehören nicht in den Plan.
