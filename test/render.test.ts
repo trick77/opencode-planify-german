@@ -37,6 +37,19 @@ test("Umlaute bleiben echte Zeichen und Eszett kommt nicht vor", () => {
   assert.doesNotMatch(html, /&auml;|&uuml;|&ouml;/)
 })
 
+test("Dark Mode haengt an der Systemeinstellung, der Ausdruck bleibt hell", () => {
+  // When
+  const { html } = rendere(beispiel(), { basis: wurzel })
+
+  // Then
+  assert.match(html, /@media \(prefers-color-scheme: dark\)/)
+  assert.doesNotMatch(html, /data-theme|prefers-color-scheme: light/)
+  // kein Schalter im Dokument: die Datei bleibt passiv
+  assert.doesNotMatch(html, /<script|<input/)
+  // die Dark-Media-Query steht vor dem Druckblock, sonst gewinnt sie beim Ausdruck
+  assert.ok(html.indexOf("prefers-color-scheme: dark") < html.indexOf("@media print"))
+})
+
 test("unvollständiger Plan liefert Feldfehler statt HTML", () => {
   // Given
   const plan = beispiel()

@@ -80,6 +80,9 @@ p:last-child { margin-bottom: 0; }
   width: 26px; height: 26px; border-radius: 50%;
   background: var(--akzent); color: #fff;
   font-family: var(--mono); font-size: 12px; font-weight: 600;
+  /* line-height: 1 statt der geerbten 1.65: Chrome rundet sonst das Halb-Leading
+     der Zeilenbox und die Ziffer sitzt sichtbar oberhalb der Kreismitte. */
+  line-height: 1;
   display: flex; align-items: center; justify-content: center;
 }
 .schritt h3 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0 0 8px; line-height: 1.35; }
@@ -147,8 +150,43 @@ figcaption { margin-top: 14px; font-size: 14px; color: var(--text-leise); text-a
   h1 { font-size: 27px; }
 }
 
+
+/* Dark Mode: folgt der Systemeinstellung, ausschliesslich Token-Overrides.
+   Layoutregeln stehen nur einmal, oben. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papier: #262625;
+    --flaeche: #1f1e1d;
+    --flaeche-tief: #30302e;
+    --text: #f0eee6;
+    --text-leise: #a3a09a;
+    --linie: rgba(240, 238, 230, 0.16);
+    --linie-zart: rgba(240, 238, 230, 0.09);
+    --akzent: #d97757;
+    /* auf dunklem Grund muss der Akzent heller werden, nicht dunkler */
+    --akzent-tief: #e89778;
+    --akzent-flaeche: rgba(217, 119, 87, 0.14);
+  }
+  .schritt::before { color: #1f1e1d; }
+  .entscheidung { border-color: rgba(217, 119, 87, 0.34); }
+  /* Fremde SVG bringen eigene Farben mit und wuerden auf dunklem Grund verschwinden. */
+  figure { background: #faf9f5; }
+}
+
 @media print {
-  body { background: #fff; }
+  /* Der Ausdruck ist immer im Light Mode, auch aus dem Dark Mode heraus. */
+  :root {
+    --papier: #faf9f5;
+    --flaeche: #fff;
+    --flaeche-tief: #f0eee6;
+    --text: #1f1e1d;
+    --text-leise: #55524d;
+    --linie: rgba(31, 30, 29, 0.28);
+    --linie-zart: rgba(31, 30, 29, 0.16);
+    --akzent-tief: #b85c3f;
+    --akzent-flaeche: rgba(217, 119, 87, 0.1);
+  }
+  body { background: #fff; color: var(--text); }
   .blatt { max-width: none; padding: 0; }
   .schritt, .kontext .karte, figure { break-inside: avoid; }
 }
