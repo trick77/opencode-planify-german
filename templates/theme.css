@@ -14,6 +14,8 @@
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --radius: 10px;
+  /* damit Scrollbalken und UA-Flaechen dem Modus folgen */
+  color-scheme: light dark;
 }
 
 * { box-sizing: border-box; }
@@ -169,8 +171,10 @@ figcaption { margin-top: 14px; font-size: 14px; color: var(--text-leise); text-a
   }
   .schritt::before { color: #1f1e1d; }
   .entscheidung { border-color: rgba(217, 119, 87, 0.34); }
-  /* Fremde SVG bringen eigene Farben mit und wuerden auf dunklem Grund verschwinden. */
-  figure { background: #faf9f5; }
+  /* Fremde SVG bringen eigene Farben mit und wuerden auf dunklem Grund verschwinden.
+     Die helle Insel braucht deshalb auch wieder helle Rand- und Textfarben. */
+  figure { background: #faf9f5; border-color: rgba(31, 30, 29, 0.07); }
+  figcaption { color: #6b6862; }
 }
 
 @media print {
@@ -187,6 +191,8 @@ figcaption { margin-top: 14px; font-size: 14px; color: var(--text-leise); text-a
     --akzent-flaeche: rgba(217, 119, 87, 0.1);
   }
   body { background: #fff; color: var(--text); }
+  /* Der Dark-Block oben setzt hier eine dunkle Ziffer, die Regel gilt auch im Druck. */
+  .schritt::before { color: #fff; }
   .blatt { max-width: none; padding: 0; }
   .schritt, .kontext .karte, figure { break-inside: avoid; }
 }
