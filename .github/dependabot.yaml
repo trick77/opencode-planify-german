@@ -1,0 +1,46 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Nicht-Major-Updates einmal pro Woche gebündelt. Majors bleiben einzeln,
+      # damit sie ein echtes Review bekommen.
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+    # @opencode-ai/plugin folgt der Version des OpenCode-Binaries. Ein Bump
+    # hier heisst nicht, dass das lokal installierte Binary mitgezogen ist,
+    # deshalb nie automatisch mergen.
+    ignore:
+      - dependency-name: '@opencode-ai/plugin'
+        update-types:
+          - version-update:semver-major
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: ci
+      include: scope

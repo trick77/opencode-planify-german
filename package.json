@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "planify",
-  "version": "0.1.0",
-  "description": "OpenCode plugin: Pläne als JSON, lokal zu eigenständigem HTML gerendert (Nunjucks), optional mit inline eingebettetem Diagramm",
+  "name": "opencode-planify-german",
+  "version": "0.2.0",
+  "description": "OpenCode-Plugin: Pläne als JSON, lokal zu eigenständigem HTML gerendert (Nunjucks), deutsch mit Schweizer Rechtschreibung",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -29,17 +29,18 @@
     "planning",
     "nunjucks",
     "diagram",
-    "de-ch"
+    "de-ch",
+    "swiss-german"
   ],
   "author": "trick77 (https://github.com/trick77)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/trick77/planify.git"
+    "url": "git+https://github.com/trick77/opencode-planify-german.git"
   },
-  "homepage": "https://github.com/trick77/planify#readme",
+  "homepage": "https://github.com/trick77/opencode-planify-german#readme",
   "bugs": {
-    "url": "https://github.com/trick77/planify/issues"
+    "url": "https://github.com/trick77/opencode-planify-german/issues"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.18",
