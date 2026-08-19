@@ -13,10 +13,10 @@ maschinenlesbare Fassung.
 
 | Was du davon hast | Warum |
 | --- | --- |
-| **Günstiger pro Plan** | Tokens gehen in den Inhalt, nicht in Tags. Die Form kommt aus dem Template auf deiner Platte. |
+| **Günstiger pro Plan** | Tokens gehen in den Inhalt, nicht in Tags. Die Form kommt aus dem lokal installierten Template. |
 | **Verlässliche Struktur** | Schema-Prüfung, bevor etwas geschrieben wird: fehlende Verifikation oder ein unklarer Dateipfad kommen als Feldfehler zurück. |
 | **Schneller zu prüfen** | Nummerierte Schritte, Pfad und Änderung nebeneinander, offene Entscheidungen mit Empfehlung und Abwägung hervorgehoben. |
-| **Kontext im Review** | Plan als HTML und JSON in `docs/plans/`, geht mit dem Code in den Pull Request. Der Kollege sieht die Absicht, ohne sie aus dem Diff zu erschliessen. |
+| **Kontext im Review** | Plan als HTML und JSON in `docs/plans/`, geht mit dem Code in den Pull Request. Die Absicht steht im Review, statt aus dem Diff erschlossen zu werden. |
 | **Deutsch** | Muttersprache liest sich schneller, die Aufmerksamkeit bleibt beim Inhalt. Der Unterschied zwischen "muss", "soll" und "kann" fällt beim ersten Lesen auf. |
 
 ## Bestandteile
