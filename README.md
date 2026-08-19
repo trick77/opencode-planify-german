@@ -2,51 +2,43 @@
 
 Pläne für OpenCode: das Modell liefert JSON, ein lokales Nunjucks-Template
 rendert daraus eine eigenständige HTML-Datei und öffnet sie im Standard-Browser
-des Systems. Pläne sind deutsch, mit echten Umlauten und ohne Eszett. Kein
-MCP-Server. Nur OpenCode.
+des Systems. Pläne sind deutsch, in Schweizer Rechtschreibung mit echten
+Umlauten. Läuft lokal in OpenCode, als Plugin plus Skill.
 
 Das Layout ist festverdrahtet, das Modell liefert nur Inhalt: deshalb sieht jeder
 Plan gleich aus, und das JSON daneben bleibt maschinenlesbar.
 
 ## Warum
 
-**JSON statt HTML, weil Markup Tokens kostet.** Schreibt das Modell das HTML
-selbst, erzeugt es bei jedem Plan dieselbe Struktur neu — Kopf, Tabellen,
-verschachtelte Listen, Stilangaben. Das sind Tokens für Tags statt für Inhalt.
-JSON trägt nur die Aussagen, die Form kommt aus dem Template, das lokal liegt und
-nichts kostet. Und was nicht jedes Mal neu erfunden wird, geht auch nicht jedes
-Mal anders kaputt: fehlt ein Feld, weist die Schema-Prüfung den Plan ab, statt
-ihn hübsch formatiert auszuliefern.
+**Günstiger pro Plan.** Das Modell erzeugt nur die Aussagen, die Form kommt aus
+dem Template auf deiner Platte. Die Tokens gehen in den Inhalt, nicht in Tags,
+die sich von Plan zu Plan ohnehin nie ändern.
 
-**HTML statt Markdown oder CLI-Text, weil ein Plan gelesen wird.** Er ist kein
-Logeintrag zum Überfliegen, sondern ein Dokument, dem man zustimmt oder
-widerspricht. In HTML zeigt die Form die Struktur: Schritte als nummerierte
-Karten, Pfad und Änderung nebeneinander, offene Entscheidungen hervorgehoben
-statt im Fliesstext begraben. Sternchen, Pipe-Tabellen und wegscrollender
-Harness-Output lassen den Leser die Struktur selbst zusammensetzen — Arbeit, die
-beim Prüfen nicht zusätzlich anfallen soll.
+**Verlässliche Struktur.** Der Plan wird gegen ein Schema geprüft, bevor etwas
+geschrieben wird: fehlt die Verifikation oder ein Dateipfad, kommt der Plan mit
+Feldfehlern zurück und das Modell zieht nach.
 
-**Der Plan liegt beim Code, weil Reviewer die Absicht sonst rekonstruieren
-müssen.** Ein Diff zeigt, was geändert wurde, nicht wozu. Liegt der Plan im Pull
-Request, sieht der Kollege die Grundlage der Änderung — Problem, Schritte,
-Verifikation, offene Entscheidungen — und muss sie nicht aus dem Diff und der
-Commit-Message zusammenreimen. Das beantwortet auch die Frage, die bei
-agentengeschriebenem Code zuerst kommt: was war eigentlich der Auftrag.
+**Schneller zu prüfen.** Schritte stehen als nummerierte Karten, Pfad und
+Änderung nebeneinander, offene Entscheidungen mit Empfehlung und Abwägung
+hervorgehoben. Du siehst in Sekunden, welche Dateien angefasst werden und woran
+Erfolg gemessen wird.
 
-**Deutsch, weil die Muttersprache schneller und tiefer verarbeitet wird.** In der
-Erstsprache läuft das Lesen automatisch ab, in einer Zweitsprache bindet das
-Entschlüsseln Aufmerksamkeit — die beim Prüfen anderswo gebraucht wird: trifft
-der Schritt das Problem, stimmt die Reihenfolge, geht eine Zusage zu weit. Dazu
-die Feinauflösung: der Unterschied zwischen "muss", "soll" und "kann", zwischen
-"nur" und "auch" springt in der Muttersprache sofort ins Auge, in der
-Zweitsprache oft erst beim zweiten Lesen — und das findet unter Zeitdruck nicht
-statt. Ein Plan wird einmal gelesen und dann umgesetzt.
+**Kontext im Pull Request.** Der Plan liegt als HTML und als JSON in
+`docs/plans/` und geht mit dem Code ins Review. Der Kollege sieht Problem,
+Schritte und Verifikation, statt die Absicht aus dem Diff zu erschliessen — bei
+agentengeschriebenem Code die erste Frage.
+
+**Deutsch liest sich schneller und genauer.** In der Muttersprache läuft das
+Lesen automatisch ab, die Aufmerksamkeit bleibt für die inhaltlichen Fragen frei:
+trifft der Schritt das Problem, stimmt die Reihenfolge, geht eine Zusage zu weit.
+Der Unterschied zwischen "muss", "soll" und "kann" fällt beim ersten Lesen auf —
+und ein zweites Lesen findet unter Zeitdruck selten statt.
 
 ## Bestandteile
 
 | Teil | Datei | Wirkung |
 | --- | --- | --- |
-| Instructions | `instructions/planify.md` | Immer geladen: Deutsch, echte Umlaute, kein Eszett, Plan nur als JSON über `plan_render`. |
+| Instructions | `instructions/planify.md` | Immer geladen: Deutsch, Schweizer Rechtschreibung, Plan als JSON über `plan_render`. |
 | Skill | `skills/planify/SKILL.md` | Auf Abruf: Schema, Feldbedeutungen, Schreibregeln, Diagrammweg, Beispiel. |
 | Plugin | `src/plugin.ts` | Registriert das Tool `plan_render`: validiert, schreibt JSON und HTML nach `docs/plans/`, öffnet die Datei. |
 | Renderer | `src/render.ts`, `templates/` | Schema-Prüfung (ajv), Orthografie-Warnungen, Nunjucks, SVG inline. |
@@ -61,8 +53,7 @@ npx opencode-presets install opencode-planify-german
 
 Das Bundle installiert die drei Teile zusammen: das Plugin mit dem Tool
 `plan_render` (gepinnt), die Regeldatei nach `instructions` und den Skill nach
-`skills.paths`. Einzeln bringt keiner davon etwas — die Regeln nennen sonst ein
-Tool, das es nicht gibt, und das Plugin wird nie aufgerufen.
+`skills.paths`.
 
 Prüfen:
 
@@ -79,12 +70,11 @@ npx opencode-presets remove opencode-planify-german
 
 ## Ablauf
 
-1. Die Regeldatei ist in jeder Session geladen und verlangt: Plan als JSON, kein
-   handgeschriebenes HTML oder Markdown.
+1. Die Regeldatei ist in jeder Session geladen und verlangt den Plan als JSON.
 2. Das Ticket kommt aus dem Branch (`git rev-parse --abbrev-ref HEAD`, Muster
    `[A-Z][A-Z0-9]+-[0-9]+`). Kein Treffer → das Modell fragt nach.
-3. Das JSON geht an `plan_render`. Verletzt es das Schema, wird nichts
-   geschrieben und die Feldfehler kommen zurück; das Modell korrigiert selbst.
+3. Das JSON geht an `plan_render`. Bei Schemaverletzungen kommen die Feldfehler
+   zurück, bevor etwas geschrieben wird; das Modell korrigiert selbst.
 4. Eszett und ASCII-Umschreibungen von Umlauten in Prosafeldern kommen als
    Warnung zurück. Pfade, Kommandos und der Slug sind ausgenommen.
 5. Geschrieben werden `docs/plans/<TICKET>-<slug>.plan.json` und `.html`, dann
@@ -99,12 +89,11 @@ mit `open: false` schreibt die Dateien, ohne etwas zu öffnen.
 
 ## Diagramme
 
-Optional und nur, wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt:
-Abhängigkeiten, Datenfluss, Zustände, Reihenfolgen mit Verzweigungen. Eine
-lineare Schrittfolge wird aufgezählt, nicht gezeichnet.
+Optional, für Struktur, die die Prosa nicht trägt: Abhängigkeiten, Datenfluss,
+Zustände, Reihenfolgen mit Verzweigungen.
 
-Erzeugt wird es mit dem Skill `diagram-design`, als SVG exportiert, der Pfad
-steht im Plan unter `diagram.svgPath`. planify bettet das SVG inline ein und
+Erzeugt wird das Diagramm mit dem Skill `diagram-design`, als SVG exportiert, der
+Pfad steht im Plan unter `diagram.svgPath`. planify bettet das SVG inline ein und
 entfernt dabei `script`, `on*`-Attribute und den Google-Fonts-Import, damit die
 Plan-Datei offline-fest bleibt.
 
@@ -115,6 +104,3 @@ deshalb klonst du selbst und gibst den Pfad mit:
 git clone https://github.com/cathrynlavery/diagram-design.git
 npx opencode-presets install skill-diagram-design --set skillsDir="$PWD/diagram-design/skills"
 ```
-
-Ohne diesen Skill bleibt `diagram` einfach weg — handgeschriebene SVG oder
-Mermaid-Blöcke gehören nicht in den Plan.
