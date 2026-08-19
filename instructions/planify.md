@@ -90,4 +90,4 @@ anlegen. Auch im Plan-Modus und in jedem Projekt, in dem du gerade arbeitest.
   `diagram.svgPath` eintragen — planify bettet es inline ein.
 
 Feldbedeutungen, Schreibregeln pro Feld und ein vollständiges Beispiel stehen in
-der Skill `planify`. Lade sie, bevor du den ersten Plan in einer Sitzung baust.
+dem Skill `planify`. Lade ihn, bevor du den ersten Plan in einer Sitzung baust.

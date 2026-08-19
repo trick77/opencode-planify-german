@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opencode-planify-german",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "OpenCode-Plugin: Pläne als JSON, lokal zu eigenständigem HTML gerendert (Nunjucks), deutsch mit Schweizer Rechtschreibung",
   "type": "module",
   "main": "./src/index.ts",
