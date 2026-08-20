@@ -62,6 +62,11 @@ Nie selbst HTML oder Markdown für einen Plan schreiben, nie den Plan als
 Fliesstext in den Chat, nie eine Plan-Datei per `write` oder `edit`. Gilt auch im
 Plan-Modus und in jedem Projekt.
 
+Fehlt das Tool `plan_render`, ist das Plugin nicht installiert: nicht auf ein
+anderes Format ausweichen, sondern abbrechen und im Chat
+`npx opencode-presets install opencode-planify-german` nennen, dazu den Hinweis,
+dass opencode danach neu starten muss.
+
 - Feldnamen englisch, Inhalte deutsch, echte Umlaute, kein Eszett.
 - Schemafehler zurück → nichts geschrieben. Felder korrigieren, erneut aufrufen,
   nicht auf ein anderes Ausgabeformat ausweichen.

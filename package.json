@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opencode-planify-german",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "OpenCode-Plugin: Pläne als JSON, lokal zu eigenständigem HTML gerendert (Nunjucks), deutsch mit Schweizer Rechtschreibung",
   "type": "module",
   "main": "./src/index.ts",
@@ -34,6 +34,9 @@
   ],
   "author": "trick77 (https://github.com/trick77)",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/trick77/opencode-planify-german.git"
