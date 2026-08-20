@@ -19,6 +19,26 @@ Nie selbst HTML oder Markdown für einen Plan schreiben, nie eine Plan-Datei per
 `write` oder `edit` anlegen. Schemafehler zurück → nichts geschrieben, Felder
 korrigieren, erneut aufrufen.
 
+## Tool fehlt
+
+Ist `plan_render` in dieser Sitzung nicht verfügbar, ist das Plugin nicht
+installiert. Dann keinen Plan schreiben — weder als HTML noch als Markdown noch
+als Fliesstext im Chat — sondern abbrechen und im Chat genau das melden:
+
+```sh
+npx opencode-presets install opencode-planify-german
+```
+
+Danach opencode neu starten: Plugins werden beim Start aufgelöst, ein laufender
+Prozess sieht die Installation nicht. Prüfen mit:
+
+```sh
+opencode debug agent plan | grep plan_render
+```
+
+Bleibt der Treffer aus, ist die Installation das Problem und nicht der Plan. Erst
+weitermachen, wenn das Tool da ist.
+
 ## Sprache
 
 Feldnamen englisch, Inhalte deutsch. Echte Umlaute (ä, ö, ü), nie ae/oe/ue. Kein

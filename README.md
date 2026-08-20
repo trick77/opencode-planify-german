@@ -37,15 +37,21 @@ npx opencode-presets install opencode-planify-german
 ```
 
 Das Bundle installiert die drei Teile zusammen: das Plugin mit dem Tool
-`plan_render` (gepinnt), die Regeldatei nach `instructions` und den Skill nach
-`skills.paths`.
+`plan_render` aus der npm-Registry (auf die Version gepinnt), die Regeldatei nach
+`instructions` und den Skill nach `skills.paths`.
 
-Prüfen:
+Der Installer schreibt für das Plugin nur den Paket-Spec nach `opencode.json`;
+geladen wird das Paket beim nächsten Start von opencode. Also opencode einmal neu
+starten, dann prüfen:
 
 ```sh
 opencode debug agent plan | grep plan_render
 opencode debug skill | grep planify
 ```
+
+Kein Treffer bei `plan_render`: das Plugin ist nicht angekommen. Dann Bundle neu
+installieren und opencode neu starten — ohne das Tool ist der Skill wirkungslos,
+und Pläne von Hand als HTML zu schreiben ist keine Ersatzlösung.
 
 Deinstallieren:
 
