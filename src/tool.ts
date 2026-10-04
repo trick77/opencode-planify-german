@@ -2,19 +2,19 @@ import { spawn } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { tool } from "@opencode-ai/plugin"
-import { baueOeffnenBefehl } from "./oeffnen.ts"
-import { dateiname, rendere, validiere } from "./render.ts"
+import { buildOpenCommand } from "./open.ts"
+import { baseName, render, validate } from "./render.ts"
 
 const z = tool.schema
 
-// Die verbindliche Pruefung macht ajv gegen skills/planify/schema/plan.schema.json.
+// Die verbindliche Prüfung macht ajv gegen skills/planify/schema/plan.schema.json.
 // Diese zod-Form beschreibt dem Modell nur die Struktur.
-const datei = z.object({
+const fileEntry = z.object({
   path: z.string().describe("Pfad relativ zum Projekt, z. B. src/render.ts"),
   change: z.string().describe("Was in dieser Datei passiert, ein Satz"),
 })
 
-const planForm = z.object({
+const planShape = z.object({
   ticket: z.string().describe("Ticket-Key aus dem Branch, Muster [A-Z][A-Z0-9]+-[0-9]+"),
   slug: z.string().describe("Kurztitel in Kebab-Case, ASCII ohne Umlaute (nur für den Dateinamen)"),
   title: z.string().describe("Titel des Vorhabens, deutsch"),
@@ -28,7 +28,7 @@ const planForm = z.object({
       z.object({
         title: z.string(),
         rationale: z.string().optional().describe("Warum der Schritt nötig ist. Nur wenn nicht offensichtlich"),
-        files: z.array(datei).describe("Mindestens eine Datei mit exaktem Pfad"),
+        files: z.array(fileEntry).describe("Mindestens eine Datei mit exaktem Pfad"),
         commands: z.array(z.string()).optional(),
       }),
     )
@@ -56,7 +56,7 @@ const planForm = z.object({
     .describe("Metadaten des Plans"),
 })
 
-export type ToolOptionen = {
+export type RenderToolOptions = {
   /** Öffnen-Kommando überschreiben, z. B. "firefox". Standard: Handler des Systems. */
   openWith?: string
 }
@@ -65,7 +65,7 @@ export type ToolOptionen = {
  * Baut das Tool `plan_render`. Als Fabrik, damit das Plugin seine Optionen
  * (etwa ein abweichendes Öffnen-Kommando) hineingeben kann.
  */
-export function erstellePlanRenderTool(optionen: ToolOptionen = {}) {
+export function createPlanRenderTool(options: RenderToolOptions = {}) {
   return tool({
   description:
     "Rendert einen Plan aus JSON zu einer eigenständigen HTML-Datei und öffnet sie im Standard-Browser. " +
@@ -73,7 +73,7 @@ export function erstellePlanRenderTool(optionen: ToolOptionen = {}) {
     "Nicht schemakonform → nichts geschrieben, Feldfehler kommen zurück, korrigieren und erneut aufrufen. " +
     "Felder und Schreibregeln: Skill \"planify\".",
   args: {
-    plan: planForm.describe("Vollständiger Plan. Feldnamen englisch, Inhalte deutsch"),
+    plan: planShape.describe("Vollständiger Plan. Feldnamen englisch, Inhalte deutsch"),
     outDir: z
       .string()
       .optional()
@@ -82,50 +82,50 @@ export function erstellePlanRenderTool(optionen: ToolOptionen = {}) {
   },
   async execute(args, context) {
     const plan = args.plan as any
-    const fehler = validiere(plan)
-    if (fehler.length) {
+    const errors = validate(plan)
+    if (errors.length) {
       return [
         "Plan nicht geschrieben — Schema verletzt:",
-        ...fehler.map((f) => `  ${f.pfad || "/"}: ${f.meldung}`),
+        ...errors.map((f) => `  ${f.path || "/"}: ${f.message}`),
         "",
         "Felder korrigieren und plan_render erneut aufrufen.",
       ].join("\n")
     }
 
-    const ziel = resolve(context.directory, args.outDir ?? "docs/plans")
-    mkdirSync(ziel, { recursive: true })
-    const basis = dateiname(plan)
-    const jsonPfad = resolve(ziel, `${basis}.plan.json`)
-    const htmlPfad = resolve(ziel, `${basis}.html`)
+    const targetDir = resolve(context.directory, args.outDir ?? "docs/plans")
+    mkdirSync(targetDir, { recursive: true })
+    const name = baseName(plan)
+    const jsonPath = resolve(targetDir, `${name}.plan.json`)
+    const htmlPath = resolve(targetDir, `${name}.html`)
 
-    let ergebnis
+    let result
     try {
-      ergebnis = rendere(plan, { basis: context.directory })
-    } catch (fehlerBeimRendern) {
-      return `Plan nicht geschrieben — Rendern fehlgeschlagen: ${(fehlerBeimRendern as Error).message}`
+      result = render(plan, { baseDir: context.directory })
+    } catch (renderError) {
+      return `Plan nicht geschrieben — Rendern fehlgeschlagen: ${(renderError as Error).message}`
     }
 
-    writeFileSync(jsonPfad, JSON.stringify(plan, null, 2) + "\n", "utf8")
-    writeFileSync(htmlPfad, ergebnis.html, "utf8")
+    writeFileSync(jsonPath, JSON.stringify(plan, null, 2) + "\n", "utf8")
+    writeFileSync(htmlPath, result.html, "utf8")
 
-    const befehl = args.open === false ? undefined : baueOeffnenBefehl(htmlPfad, optionen)
-    if (befehl) {
-      spawn(befehl.kommando, befehl.argumente, { stdio: "ignore", detached: true }).unref()
+    const openCommand = args.open === false ? undefined : buildOpenCommand(htmlPath, options)
+    if (openCommand) {
+      spawn(openCommand.command, openCommand.args, { stdio: "ignore", detached: true }).unref()
     }
 
-    context.metadata({ title: `${plan.ticket} — ${plan.title}`, metadata: { jsonPfad, htmlPfad } })
+    context.metadata({ title: `${plan.ticket} — ${plan.title}`, metadata: { jsonPath, htmlPath } })
 
-    const zeilen = [`Plan geschrieben:`, `  ${jsonPfad}`, `  ${htmlPfad}`]
-    if (befehl) zeilen.push(`Im Standard-Browser geöffnet (${befehl.kommando}).`)
-    else if (args.open !== false) zeilen.push("Kein Öffnen-Kommando für diese Plattform, Datei bitte selbst öffnen.")
-    if (ergebnis.warnungen.length) {
-      zeilen.push("", "Warnungen zur Schreibweise (bitte im nächsten Zug korrigieren und neu rendern):")
-      for (const w of ergebnis.warnungen) zeilen.push(`  ${w.pfad}: ${w.meldung}`)
+    const lines = [`Plan geschrieben:`, `  ${jsonPath}`, `  ${htmlPath}`]
+    if (openCommand) lines.push(`Im Standard-Browser geöffnet (${openCommand.command}).`)
+    else if (args.open !== false) lines.push("Kein Öffnen-Kommando für diese Plattform, Datei bitte selbst öffnen.")
+    if (result.warnings.length) {
+      lines.push("", "Warnungen zur Schreibweise (bitte im nächsten Zug korrigieren und neu rendern):")
+      for (const w of result.warnings) lines.push(`  ${w.path}: ${w.message}`)
     }
-    return zeilen.join("\n")
+    return lines.join("\n")
   },
   })
 }
 
 /** Standard-Instanz für den Installationsweg über das Tool-Verzeichnis. */
-export const planRenderTool = erstellePlanRenderTool()
+export const planRenderTool = createPlanRenderTool()

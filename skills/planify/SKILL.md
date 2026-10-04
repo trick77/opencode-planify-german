@@ -101,6 +101,20 @@ Bilder.
 Ist `diagram-design` nicht verfügbar, `diagram` weglassen — kein handgeschriebenes
 SVG, keine Mermaid-Blöcke im Plan.
 
+## PR-Description
+
+Auf Verlangen des Benutzers schreibt `plan_pr` einen gerenderten Plan als Markdown
+in die Description eines offenen Bitbucket-Data-Center-PRs.
+
+| Argument | Pflicht | Inhalt |
+| --- | --- | --- |
+| `path` | ja | Pfad zur `.plan.json` aus dem Ergebnis von `plan_render`. |
+| `prUrl` | nein | PR-URL aus dem Browser. Nur bei mehreren offenen PRs oder einem PR ausserhalb des aktuellen Branches. |
+
+Die Description wird vollständig ersetzt, Titel und Reviewer bleiben. Kein
+Diagramm: Bitbucket stellt kein SVG dar, die Description verweist auf den
+HTML-Plan. `plan_pr` legt nie einen PR an und schreibt nie einen Kommentar.
+
 ## Beispiel
 
 `references/beispiel-plan.json` ist ein vollständiger, schemakonformer Plan. Lies

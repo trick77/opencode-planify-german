@@ -3,21 +3,21 @@ import assert from "node:assert/strict"
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { resolve } from "node:path"
-import { dateiname, ladeSvg, pruefeSchreibweise, rendere, validiere, wurzel } from "../src/render.ts"
-import { baueOeffnenBefehl } from "../src/oeffnen.ts"
+import { baseName, loadSvg, checkSpelling, render, renderMarkdown, validate, root } from "../src/render.ts"
+import { buildOpenCommand } from "../src/open.ts"
 
-const beispielPfad = resolve(wurzel, "skills/planify/references/beispiel-plan.json")
-const beispiel = () => JSON.parse(readFileSync(beispielPfad, "utf8"))
+const examplePath = resolve(root, "skills/planify/references/beispiel-plan.json")
+const example = () => JSON.parse(readFileSync(examplePath, "utf8"))
 
 test("valider Plan rendert eigenständiges HTML", () => {
   // Given
-  const plan = beispiel()
+  const plan = example()
 
   // When
-  const { html, warnungen } = rendere(plan, { basis: wurzel })
+  const { html, warnings } = render(plan, { baseDir: root })
 
   // Then
-  assert.equal(warnungen.length, 0)
+  assert.equal(warnings.length, 0)
   assert.ok(html.startsWith("<!doctype html>"))
   assert.match(html, /<meta charset="utf-8">/)
   assert.match(html, /<html lang="de">/)
@@ -29,7 +29,7 @@ test("valider Plan rendert eigenständiges HTML", () => {
 
 test("Umlaute bleiben echte Zeichen und Eszett kommt nicht vor", () => {
   // When
-  const { html } = rendere(beispiel(), { basis: wurzel })
+  const { html } = render(example(), { baseDir: root })
 
   // Then
   assert.ok(html.includes("Änderung") || html.includes("löschen"))
@@ -39,7 +39,7 @@ test("Umlaute bleiben echte Zeichen und Eszett kommt nicht vor", () => {
 
 test("Dark Mode haengt an der Systemeinstellung, der Ausdruck bleibt hell", () => {
   // When
-  const { html } = rendere(beispiel(), { basis: wurzel })
+  const { html } = render(example(), { baseDir: root })
 
   // Then
   assert.match(html, /@media \(prefers-color-scheme: dark\)/)
@@ -54,105 +54,105 @@ test("Dark Mode haengt an der Systemeinstellung, der Ausdruck bleibt hell", () =
 
 test("unvollständiger Plan liefert Feldfehler statt HTML", () => {
   // Given
-  const plan = beispiel()
+  const plan = example()
   delete plan.verification
 
   // When
-  const fehler = validiere(plan)
+  const errors = validate(plan)
 
   // Then
-  assert.ok(fehler.length > 0)
-  assert.ok(fehler.some((f) => f.meldung.includes("verification")))
-  assert.throws(() => rendere(plan, { basis: wurzel }), /nicht schemakonform/)
+  assert.ok(errors.length > 0)
+  assert.ok(errors.some((f) => f.message.includes("verification")))
+  assert.throws(() => render(plan, { baseDir: root }), /nicht schemakonform/)
 })
 
 test("Ticket ohne Muster wird abgelehnt", () => {
   // Given
-  const plan = beispiel()
+  const plan = example()
   plan.ticket = "kein-ticket"
 
   // When
-  const fehler = validiere(plan)
+  const errors = validate(plan)
 
   // Then
-  assert.ok(fehler.some((f) => f.pfad === "/ticket"))
+  assert.ok(errors.some((f) => f.path === "/ticket"))
 })
 
 test("Eszett und ASCII-Umschreibung werden als Warnung gemeldet", () => {
   // Given
-  const plan = beispiel()
+  const plan = example()
   plan.intent = "Die Groesse der Aenderung heißt, dass wir fuer den Build eine neue, manuelle Lösung brauchen."
 
   // When
-  const warnungen = pruefeSchreibweise(plan)
+  const warnings = checkSpelling(plan)
 
   // Then
-  assert.ok(warnungen.some((w) => w.meldung.includes("Eszett")))
-  const ascii = warnungen.find((w) => w.meldung.includes("ASCII-Umschreibung"))
+  assert.ok(warnings.some((w) => w.message.includes("Eszett")))
+  const ascii = warnings.find((w) => w.message.includes("ASCII-Umschreibung"))
   assert.ok(ascii)
-  assert.match(ascii.meldung, /Groesse/)
-  assert.match(ascii.meldung, /fuer/)
-  assert.doesNotMatch(ascii.meldung, /manuelle|neue/)
+  assert.match(ascii.message, /Groesse/)
+  assert.match(ascii.message, /fuer/)
+  assert.doesNotMatch(ascii.message, /manuelle|neue/)
 })
 
 test("Pfade und Kommandos werden nicht auf Orthografie geprüft", () => {
   // Given
-  const plan = beispiel()
+  const plan = example()
   plan.steps[0].files[0].path = "src/Strassenverzeichnis-groß.java"
 
   // When
-  const warnungen = pruefeSchreibweise(plan)
+  const warnings = checkSpelling(plan)
 
   // Then
-  assert.equal(warnungen.length, 0)
+  assert.equal(warnings.length, 0)
 })
 
 test("SVG wird inline eingebettet, aktive Inhalte fliegen raus", () => {
   // Given
-  const verzeichnis = mkdtempSync(resolve(tmpdir(), "planify-"))
-  const svgPfad = resolve(verzeichnis, "abhaengigkeiten.svg")
+  const dir = mkdtempSync(resolve(tmpdir(), "planify-"))
+  const svgPath = resolve(dir, "abhaengigkeiten.svg")
   writeFileSync(
-    svgPfad,
+    svgPath,
     '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><script>alert(1)</script><rect onclick="alert(2)" width="10" height="10"/></svg>',
     "utf8",
   )
-  const plan = beispiel()
+  const plan = example()
   plan.diagram = { title: "Abhängigkeiten", caption: "Beispiel", svgPath: "abhaengigkeiten.svg" }
 
   // When
-  const { html, warnungen } = rendere(plan, { basis: verzeichnis })
-  const geladen = ladeSvg(svgPfad, verzeichnis)
+  const { html, warnings } = render(plan, { baseDir: dir })
+  const loaded = loadSvg(svgPath, dir)
 
   // Then
   assert.match(html, /<svg /)
   assert.doesNotMatch(html, /<script>alert/)
   assert.doesNotMatch(html, /onclick/)
   assert.match(html, /Abhängigkeiten/)
-  assert.ok(geladen.svg.startsWith("<svg"))
-  assert.ok(warnungen.some((w) => w.meldung.includes("aktive Inhalte")))
+  assert.ok(loaded.svg.startsWith("<svg"))
+  assert.ok(warnings.some((w) => w.message.includes("aktive Inhalte")))
 })
 
 test("fehlendes SVG bricht mit klarer Meldung ab", () => {
   // Given
-  const plan = beispiel()
+  const plan = example()
   plan.diagram = { title: "Fehlt", svgPath: "gibt-es-nicht.svg" }
 
   // When / Then
-  assert.throws(() => rendere(plan, { basis: wurzel }), /SVG nicht gefunden/)
+  assert.throws(() => render(plan, { baseDir: root }), /SVG nicht gefunden/)
 })
 
 test("Dateiname setzt sich aus Ticket und Slug zusammen", () => {
   // When / Then
-  assert.equal(dateiname(beispiel()), "SEP-24758-mapstruct-gradle-migration")
+  assert.equal(baseName(example()), "SEP-24758-mapstruct-gradle-migration")
 })
 
 test("Nunjucks escapt Inhalte aus dem Plan", () => {
   // Given
-  const plan = beispiel()
+  const plan = example()
   plan.steps[0].title = "<script>alert('x')</script>"
 
   // When
-  const { html } = rendere(plan, { basis: wurzel })
+  const { html } = render(plan, { baseDir: root })
 
   // Then
   assert.doesNotMatch(html, /<script>alert/)
@@ -161,30 +161,30 @@ test("Nunjucks escapt Inhalte aus dem Plan", () => {
 
 test("Web-Font-Import aus einem diagram-design-Export wird entfernt", () => {
   // Given
-  const verzeichnis = mkdtempSync(resolve(tmpdir(), "planify-"))
-  const svgPfad = resolve(verzeichnis, "architektur.svg")
+  const dir = mkdtempSync(resolve(tmpdir(), "planify-"))
+  const svgPath = resolve(dir, "architektur.svg")
   writeFileSync(
-    svgPfad,
+    svgPath,
     '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">' +
       "<defs><style>@import url('https://fonts.googleapis.com/css2?family=Geist&amp;display=swap');</style></defs>" +
       '<rect width="10" height="10"/></svg>',
     "utf8",
   )
-  const plan = beispiel()
+  const plan = example()
   plan.diagram = { title: "Architektur", svgPath: "architektur.svg" }
 
   // When
-  const { html, warnungen } = rendere(plan, { basis: verzeichnis })
+  const { html, warnings } = render(plan, { baseDir: dir })
 
   // Then
   assert.doesNotMatch(html, /fonts\.googleapis\.com/)
   // xmlns bleibt erlaubt, es ist eine Namensraum-URI und kein Abruf
   assert.doesNotMatch(html, /(?:href|src)\s*=\s*["']https?:/)
   assert.doesNotMatch(html, /url\(["']?https?:/)
-  assert.ok(warnungen.some((w) => w.meldung.includes("Web-Font-Import")))
+  assert.ok(warnings.some((w) => w.message.includes("Web-Font-Import")))
 })
 
-test("Plugin registriert das Tool plan_render", async () => {
+test("Plugin registriert die Tools plan_render und plan_pr", async () => {
   // Given
   const { PlanifyPlugin } = await import("../src/plugin.ts")
 
@@ -193,15 +193,16 @@ test("Plugin registriert das Tool plan_render", async () => {
 
   // Then
   assert.ok(hooks.tool)
-  assert.deepEqual(Object.keys(hooks.tool), ["plan_render"])
+  assert.deepEqual(Object.keys(hooks.tool), ["plan_render", "plan_pr"])
   assert.match(hooks.tool.plan_render.description, /Plan/)
+  assert.match(hooks.tool.plan_pr.description, /Description/)
 })
 
 test("Schema und Templates liegen unter der Paketwurzel", () => {
   // Given / When / Then
-  assert.ok(existsSync(resolve(wurzel, "skills/planify/schema/plan.schema.json")))
-  assert.ok(existsSync(resolve(wurzel, "templates/plan.njk")))
-  assert.ok(existsSync(resolve(wurzel, "templates/theme.css")))
+  assert.ok(existsSync(resolve(root, "skills/planify/schema/plan.schema.json")))
+  assert.ok(existsSync(resolve(root, "templates/plan.njk")))
+  assert.ok(existsSync(resolve(root, "templates/theme.css")))
 })
 
 test("Öffnen-Kommando folgt der Plattform", () => {
@@ -209,19 +210,19 @@ test("Öffnen-Kommando folgt der Plattform", () => {
   const env = {}
 
   // When / Then
-  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "darwin", env }), {
-    kommando: "open",
-    argumente: ["/x/plan.html"],
+  assert.deepEqual(buildOpenCommand("/x/plan.html", { platform: "darwin", env }), {
+    command: "open",
+    args: ["/x/plan.html"],
   })
-  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "linux", env }), {
-    kommando: "xdg-open",
-    argumente: ["/x/plan.html"],
+  assert.deepEqual(buildOpenCommand("/x/plan.html", { platform: "linux", env }), {
+    command: "xdg-open",
+    args: ["/x/plan.html"],
   })
-  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "win32", env }), {
-    kommando: "cmd",
-    argumente: ["/c", "start", "", "/x/plan.html"],
+  assert.deepEqual(buildOpenCommand("/x/plan.html", { platform: "win32", env }), {
+    command: "cmd",
+    args: ["/c", "start", "", "/x/plan.html"],
   })
-  assert.equal(baueOeffnenBefehl("/x/plan.html", { plattform: "sunos", env }), undefined)
+  assert.equal(buildOpenCommand("/x/plan.html", { platform: "sunos", env }), undefined)
 })
 
 test("openWith und PLANIFY_OPEN schlagen den Plattform-Standard", () => {
@@ -229,12 +230,63 @@ test("openWith und PLANIFY_OPEN schlagen den Plattform-Standard", () => {
   const env = { PLANIFY_OPEN: "chromium" }
 
   // When / Then
-  assert.deepEqual(baueOeffnenBefehl("/x/plan.html", { plattform: "darwin", env }), {
-    kommando: "chromium",
-    argumente: ["/x/plan.html"],
+  assert.deepEqual(buildOpenCommand("/x/plan.html", { platform: "darwin", env }), {
+    command: "chromium",
+    args: ["/x/plan.html"],
   })
   assert.deepEqual(
-    baueOeffnenBefehl("/x/plan.html", { openWith: "flatpak run org.mozilla.firefox", plattform: "linux", env }),
-    { kommando: "flatpak", argumente: ["run", "org.mozilla.firefox", "/x/plan.html"] },
+    buildOpenCommand("/x/plan.html", { openWith: "flatpak run org.mozilla.firefox", platform: "linux", env }),
+    { command: "flatpak", args: ["run", "org.mozilla.firefox", "/x/plan.html"] },
   )
+})
+
+test("Markdown für die PR-Description hat alle Abschnitte in fester Reihenfolge", () => {
+  // When
+  const { markdown, warnings } = renderMarkdown(example())
+
+  // Then
+  assert.equal(warnings.length, 0)
+  const headings = markdown.split("\n").filter((line) => line.startsWith("## "))
+  assert.deepEqual(headings, [
+    "## Kontext",
+    "## Schritte",
+    "## Verifikation",
+    "## Risiken",
+    "## Offene Entscheidungen",
+    "## Nicht enthalten",
+  ])
+  assert.match(markdown, /^# MapStruct-Mapper/)
+  assert.match(markdown, /- `build\.gradle\.kts` — MapStruct/)
+  assert.match(markdown, /`SEP-24758-mapstruct-gradle-migration\.plan\.json`/)
+  assert.ok(markdown.includes("Änderungen") && !markdown.includes("ß"))
+  assert.doesNotMatch(markdown, /undefined|\n{3,}/)
+})
+
+test("Markdown escapt Tabellenzellen, Code-Spans und spitze Klammern", () => {
+  // Given
+  const plan = example()
+  plan.verification[0] = { how: "grep 'a|b' `x`", expected: "Zeile eins\nZeile <zwei>" }
+  plan.steps[0].files[0].path = "src/`odd`.ts"
+
+  // When
+  const { markdown } = renderMarkdown(plan)
+
+  // Then
+  // Polster-Leerzeichen nur, wenn der Inhalt mit einem Backtick beginnt oder endet
+  assert.ok(markdown.includes("| `` grep 'a\\|b' `x` `` | Zeile eins Zeile &lt;zwei> |"))
+  assert.ok(markdown.includes("- ``src/`odd`.ts`` —"))
+})
+
+test("Diagramm fehlt im Markdown, mit Warnung und Hinweis", () => {
+  // Given
+  const plan = example()
+  plan.diagram = { title: "Ablauf", svgPath: "gibt-es-nicht.svg" }
+
+  // When
+  const { markdown, warnings } = renderMarkdown(plan)
+
+  // Then
+  assert.match(markdown, /## Ablauf\n\n_Das Diagramm steht nur im HTML-Plan/)
+  assert.doesNotMatch(markdown, /<svg/)
+  assert.ok(warnings.some((w) => w.path === "/diagram"))
 })

@@ -1,0 +1,81 @@
+{# Markdown für die Description eines Bitbucket-Data-Center-Pull-Requests. Bitbucket
+   entfernt HTML, deshalb keine Tags; Prosa läuft durch den Filter "text", Tabellenzellen
+   durch "cell", Pfade und Kommandos durch "code". #}
+# {{ plan.title | text }}
+
+{% if plan.ticket %}**{{ plan.ticket | text }}** · {% endif %}{{ plan.meta.createdAt | date }}{% if plan.meta.branch %} · Branch {{ plan.meta.branch | code }}{% endif %}{% if plan.meta.repo %} · Repo {{ plan.meta.repo | code }}{% endif %} · {{ plan.steps | length }} Schritte
+
+{{ plan.intent | text }}
+{% if plan.context %}
+
+## Kontext
+
+**Problem:** {{ plan.context.problem | text }}
+
+**Ergebnis:** {{ plan.context.outcome | text }}
+{% endif %}
+{% if plan.diagram %}
+
+## {{ plan.diagram.title | text }}
+
+_Das Diagramm steht nur im HTML-Plan, Bitbucket stellt kein SVG dar._
+{% endif %}
+
+## Schritte
+{% for step in plan.steps %}
+
+### {{ loop.index }}. {{ step.title | text }}
+{% if step.rationale %}
+
+_{{ step.rationale | text }}_
+{% endif %}
+
+{% for file in step.files %}
+- {{ file.path | code }} — {{ file.change | text }}
+{% endfor %}
+{% if step.commands and step.commands | length %}
+
+{{ step.commands | codeblock }}
+{% endif %}
+{% endfor %}
+
+## Verifikation
+
+| Vorgehen | Erwartung |
+| --- | --- |
+{% for entry in plan.verification %}
+| {{ entry.how | code | cell }} | {{ entry.expected | text | cell }} |
+{% endfor %}
+{% if plan.risks and plan.risks | length %}
+
+## Risiken
+
+| Risiko | Gegenmassnahme |
+| --- | --- |
+{% for entry in plan.risks %}
+| {{ entry.risk | text | cell }} | {{ entry.mitigation | text | cell }} |
+{% endfor %}
+{% endif %}
+{% if plan.openDecisions and plan.openDecisions | length %}
+
+## Offene Entscheidungen
+{% for entry in plan.openDecisions %}
+
+### {{ entry.question | text }}
+
+- **Empfehlung:** {{ entry.recommendation | text }}
+- **Abwägung:** {{ entry.tradeoff | text }}
+{% endfor %}
+{% endif %}
+{% if plan.outOfScope and plan.outOfScope | length %}
+
+## Nicht enthalten
+
+{% for entry in plan.outOfScope %}
+- {{ entry | text }}
+{% endfor %}
+{% endif %}
+
+---
+
+_Erzeugt von planify aus {{ (baseName + ".plan.json") | code }}. Änderungen am Plan dort, diese Description wird beim nächsten Abgleich überschrieben._

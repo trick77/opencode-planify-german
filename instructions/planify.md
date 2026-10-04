@@ -83,5 +83,22 @@ dass opencode danach neu starten muss.
   `diagram-design` nutzen, als `.svg` exportieren, Pfad in `diagram.svgPath` —
   planify bettet es inline ein.
 
+## Plan in die PR-Description (Bitbucket Data Center)
+
+Nur wenn der Benutzer es verlangt ("Plan in den PR"). Dann das Tool `plan_pr`
+mit dem Pfad zur `.plan.json`, die `plan_render` gemeldet hat. Es sucht den
+offenen PR des aktuellen Branches selbst; eine PR-URL nur übergeben, wenn der
+Benutzer eine nennt oder `plan_pr` mehrere PRs auflistet — dann den Benutzer
+fragen, welcher gemeint ist.
+
+- Ziel ist immer die Description, nie ein Kommentar. Nie selbst Markdown für den
+  PR schreiben, nie per API, `curl` oder Browser an Bitbucket vorbei.
+- `plan_pr` ersetzt die ganze Description. Hat der Plan sich geändert: erst
+  `plan_render`, dann `plan_pr`.
+- Kein offener PR: nicht anlegen, den Benutzer bitten, ihn im Bitbucket zu
+  eröffnen.
+- Meldet `plan_pr` fehlenden Token oder fehlende URL: den genannten
+  Installationsbefehl weitergeben und aufhören.
+
 Feldbedeutungen, Schreibregeln pro Feld und ein Beispiel: Skill `planify`. Lade
 ihn, bevor du den ersten Plan einer Sitzung baust.

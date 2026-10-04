@@ -25,7 +25,7 @@ maschinenlesbare Fassung.
 | --- | --- | --- |
 | Instructions | `instructions/planify.md` | Immer geladen: Deutsch, Schweizer Rechtschreibung, Plan als JSON über `plan_render`. |
 | Skill | `skills/planify/SKILL.md` | Auf Abruf: Schema, Feldbedeutungen, Schreibregeln, Diagrammweg, Beispiel. |
-| Plugin | `src/plugin.ts` | Registriert das Tool `plan_render`: validiert, schreibt JSON und HTML nach `docs/plans/`, öffnet die Datei. |
+| Plugin | `src/plugin.ts` | Registriert `plan_render` (validiert, schreibt JSON und HTML nach `docs/plans/`, öffnet die Datei) und `plan_pr` (Plan in die Description eines Bitbucket-PRs). |
 | Renderer | `src/render.ts`, `templates/` | Schema-Prüfung (ajv), Orthografie-Warnungen, Nunjucks, SVG inline. |
 
 ## Installation
@@ -70,6 +70,28 @@ npx opencode-presets remove opencode-planify-german
    Warnung zurück. Pfade, Kommandos und der Slug sind ausgenommen.
 5. Geschrieben werden `docs/plans/<TICKET>-<slug>.plan.json` und `.html`, dann
    öffnet die Datei.
+
+## Plan in die PR-Description (Bitbucket Data Center)
+
+Auf Verlangen schreibt `plan_pr` den Plan als Markdown in die Description des
+offenen PRs des aktuellen Branches: "Schreib den Plan in den PR". Der PR muss
+existieren, `plan_pr` legt keinen an und schreibt keinen Kommentar. Die
+Description wird vollständig ersetzt, Titel und Reviewer bleiben. Ein Diagramm
+fehlt dort, Bitbucket stellt kein SVG dar.
+
+Projekt und Repository kommen aus `origin`, die Basis-URL und ein HTTP Access
+Token aus den Plugin-Optionen:
+
+```sh
+export BITBUCKET_TOKEN=…
+npx opencode-presets install opencode-planify-german-bitbucket \
+  --set bitbucketUrl=https://bitbucket.example.com --set-env bitbucketToken=BITBUCKET_TOKEN
+```
+
+Der Token steht danach im Klartext in `opencode.json`. Alternativ ohne Bundle
+die Umgebungsvariablen `PLANIFY_BITBUCKET_URL` und `PLANIFY_BITBUCKET_TOKEN`
+setzen. Der Token geht nur an die konfigurierte Instanz: eine PR-URL auf einem
+anderen Host lehnt `plan_pr` ab.
 
 ## Browser
 
