@@ -1,7 +1,7 @@
 {% if plan.outOfScope and plan.outOfScope | length %}
 <section>
   <h2>Nicht enthalten</h2>
-  <ul class="out-of-scope">
+  <ul class="plan-out-of-scope">
     {% for entry in plan.outOfScope %}<li>{{ entry }}</li>{% endfor %}
   </ul>
 </section>

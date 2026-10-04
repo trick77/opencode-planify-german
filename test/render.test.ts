@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { resolve } from "node:path"
-import { baseName, loadSvg, checkSpelling, render, renderMarkdown, validate, root } from "../src/render.ts"
+import { baseName, loadSvg, checkSpelling, render, renderMarkdown, validate, root, wrapProse, WRAP_WIDTH, LIST_WRAP_WIDTH } from "../src/render.ts"
 import { buildOpenCommand } from "../src/open.ts"
 
 const examplePath = resolve(root, "skills/planify/references/beispiel-plan.json")
@@ -262,19 +262,69 @@ test("Markdown für die PR-Description hat alle Abschnitte in fester Reihenfolge
   assert.doesNotMatch(markdown, /undefined|\n{3,}/)
 })
 
-test("Markdown escapt Tabellenzellen, Code-Spans und spitze Klammern", () => {
+test("Markdown escapt nur dokumentierte Zeichen und hält Prosa auf einer Zeile", () => {
   // Given
   const plan = example()
-  plan.verification[0] = { how: "grep 'a|b' `x`", expected: "Zeile eins\nZeile <zwei>" }
+  plan.steps[0].title = "Feld snake_case\nund *Stern* umbenennen"
+  plan.steps[0].rationale = "# keine Überschrift, `my_var` bleibt Code, a < b & c"
+  plan.verification[0] = { how: "grep 'a|b' `x`", expected: "1. keine Liste" }
   plan.steps[0].files[0].path = "src/`odd`.ts"
 
   // When
   const { markdown } = renderMarkdown(plan)
 
   // Then
-  // Polster-Leerzeichen nur, wenn der Inhalt mit einem Backtick beginnt oder endet
-  assert.ok(markdown.includes("| `` grep 'a\\|b' `x` `` | Zeile eins Zeile &lt;zwei> |"))
+  assert.ok(markdown.includes("### 1. Feld snake\\_case und \\*Stern\\* umbenennen\n"))
+  assert.ok(markdown.includes("\\# keine Überschrift, `my_var` bleibt Code, a < b & c"))
+  assert.ok(markdown.includes("- `` grep 'a|b' `x` `` — 1\\. keine Liste"))
   assert.ok(markdown.includes("- ``src/`odd`.ts`` —"))
+  assert.doesNotMatch(markdown, /&lt;|&amp;|\n\|/)
+})
+
+test("Kommandos mit Leerzeilen bleiben im Codeblock unverändert, ``` im Kommando wird eingerückt", () => {
+  // Given
+  const plan = example()
+  plan.steps[0].commands = ["cat <<EOF", "", "", "EOF"]
+  plan.steps[1].commands = ["echo ```"]
+
+  // When
+  const { markdown } = renderMarkdown(plan)
+
+  // Then
+  assert.ok(markdown.includes("```sh\ncat <<EOF\n\n\nEOF\n```"))
+  assert.ok(markdown.includes("\n    echo ```\n"))
+})
+
+test("Prosa bricht bei 110 Zeichen um, Listenpunkte bei 90 mit hängendem Einzug", () => {
+  // Given
+  const words = Array.from({ length: 60 }, (_, i) => `wort${i}`).join(" ")
+  const markdown = wrapProse(`${words}\n\n- ${words}\n\n## ${words}\n\n\`\`\`sh\n${words}\n\`\`\``)
+
+  // When
+  const lines = markdown.split("\n")
+  const [prose, list, heading, fenced] = markdown.split("\n\n")
+
+  // Then
+  assert.ok(prose.split("\n").length > 1)
+  assert.ok(prose.split("\n").every((line) => line.length <= WRAP_WIDTH))
+  assert.ok(list.split("\n").every((line) => line.length <= LIST_WRAP_WIDTH))
+  assert.ok(list.split("\n").slice(1).every((line) => line.startsWith("  wort")))
+  assert.equal(heading, `## ${words}`)
+  assert.equal(fenced, `\`\`\`sh\n${words}\n\`\`\``)
+  assert.ok(lines.length > 4)
+})
+
+test("Umbruch trennt keinen Code-Span und beginnt keine Zeile mit einem Blockmarker", () => {
+  // Given
+  const filler = "x".repeat(100)
+  const text = `${filler} \`ein langer code span\` und - danach 1. weiter`
+
+  // When
+  const lines = wrapProse(text, 110, 90).split("\n")
+
+  // Then
+  assert.ok(lines.some((line) => line.includes("`ein langer code span`")))
+  assert.ok(lines.every((line) => !/^(?:[-+*>#]|\d+[.)])(\s|$)/.test(line)))
 })
 
 test("Diagramm fehlt im Markdown, mit Warnung und Hinweis", () => {
@@ -286,7 +336,7 @@ test("Diagramm fehlt im Markdown, mit Warnung und Hinweis", () => {
   const { markdown, warnings } = renderMarkdown(plan)
 
   // Then
-  assert.match(markdown, /## Ablauf\n\n_Das Diagramm steht nur im HTML-Plan/)
+  assert.match(markdown, /## Ablauf\n\nDas Diagramm steht nur im HTML-Plan/)
   assert.doesNotMatch(markdown, /<svg/)
   assert.ok(warnings.some((w) => w.path === "/diagram"))
 })

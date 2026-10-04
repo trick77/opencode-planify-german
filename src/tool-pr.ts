@@ -43,6 +43,15 @@ function normalizeBaseUrl(url: string): string {
   return parsed.origin + parsed.pathname.replace(/\/+$/, "")
 }
 
+// git config ohne Treffer endet mit Exit-Code 1, das ist hier kein Fehler.
+function optionalGit(git: (args: string[], cwd: string) => string, args: string[], cwd: string): string | undefined {
+  try {
+    return git(args, cwd) || undefined
+  } catch {
+    return undefined
+  }
+}
+
 function describePullRequest(pr: PullRequest): string {
   return `  #${pr.id} → ${pr.targetBranch}: ${pr.title}\n    ${pr.url}`
 }
@@ -134,13 +143,18 @@ export function createPlanPrTool(options: PrToolOptions = {}) {
           let branch: string
           let remote: string
           try {
-            branch = git(["rev-parse", "--abbrev-ref", "HEAD"], context.directory)
-            remote = git(["remote", "get-url", "origin"], context.directory)
+            const local = git(["rev-parse", "--abbrev-ref", "HEAD"], context.directory)
+            if (local === "HEAD") {
+              return "PR nicht geändert — kein Branch ausgecheckt (detached HEAD). Branch auschecken oder PR-URL angeben."
+            }
+            // Der PR hängt am Branch auf dem Server. Heisst der lokale Branch anders
+            // (checkout -b kurz origin/feature/…), zählt der Upstream.
+            const upstream = optionalGit(git, ["config", "--get", `branch.${local}.merge`], context.directory)
+            branch = upstream?.replace(/^refs\/heads\//, "") || local
+            const remoteName = optionalGit(git, ["config", "--get", `branch.${local}.remote`], context.directory) || "origin"
+            remote = git(["remote", "get-url", remoteName === "." ? "origin" : remoteName], context.directory)
           } catch (error) {
             return `PR nicht geändert — git-Abfrage fehlgeschlagen: ${(error as Error).message}`
-          }
-          if (branch === "HEAD") {
-            return "PR nicht geändert — kein Branch ausgecheckt (detached HEAD). Branch auschecken oder PR-URL angeben."
           }
           repo = parseRemote(remote)
           const open = await findOpenPullRequests(config, repo, branch)

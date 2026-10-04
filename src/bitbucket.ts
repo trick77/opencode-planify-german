@@ -20,7 +20,13 @@ export type BitbucketConfig = {
   baseUrl: string
   token: string
   fetch?: typeof fetch
+  /** Millisekunden pro Anfrage inklusive Antwort-Body. Standard REQUEST_TIMEOUT_MS. */
+  timeoutMs?: number
 }
+
+// Ohne Grenze hängt plan_pr und damit die opencode-Sitzung, wenn Bitbucket die
+// Verbindung annimmt und nie antwortet (VPN weg, Proxy schluckt).
+export const REQUEST_TIMEOUT_MS = 30_000
 
 export class BitbucketError extends Error {
   // Kein Parameter-Property: Node führt das Paket per Type-Stripping aus, und das
@@ -53,7 +59,13 @@ export function parseRemote(remoteUrl: string): RepoRef {
       throw new BitbucketError(`Remote-URL nicht erkannt: ${url}`)
     }
   }
-  const parts = decodeURIComponent(path).replace(/\.git$/, "").split("/").filter(Boolean)
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(path)
+  } catch {
+    throw new BitbucketError(`Remote-URL nicht erkannt: ${url}`)
+  }
+  const parts = decoded.replace(/\.git$/, "").split("/").filter(Boolean)
   if (parts.length < 2) throw new BitbucketError(`Remote-URL enthält kein Projekt/Repository: ${url}`)
   const [projectKey, repoSlug] = parts.slice(-2)
   return { projectKey, repoSlug }
@@ -89,9 +101,13 @@ function repoPath(repo: RepoRef): string {
 async function request(config: BitbucketConfig, method: string, path: string, body?: unknown): Promise<any> {
   const url = config.baseUrl.replace(/\/+$/, "") + path
   const doFetch = config.fetch ?? fetch
+  const timeoutMs = config.timeoutMs ?? REQUEST_TIMEOUT_MS
+  const signal = AbortSignal.timeout(timeoutMs)
   let response: Response
+  let text: string
   try {
     response = await doFetch(url, {
+      signal,
       method,
       headers: {
         Authorization: `Bearer ${config.token}`,
@@ -100,10 +116,13 @@ async function request(config: BitbucketConfig, method: string, path: string, bo
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
+    text = await response.text()
   } catch (error) {
+    if (signal.aborted) {
+      throw new BitbucketError(`Bitbucket antwortet nicht innerhalb von ${timeoutMs / 1000} s (${config.baseUrl}).`)
+    }
     throw new BitbucketError(`Bitbucket nicht erreichbar (${config.baseUrl}): ${(error as Error).message}`)
   }
-  const text = await response.text()
   let data: any
   try {
     data = text ? JSON.parse(text) : undefined
@@ -142,9 +161,9 @@ export async function getPullRequest(config: BitbucketConfig, repo: RepoRef, id:
 
 /**
  * Ersetzt die Description. Titel und Reviewer gehen unverändert mit, damit kein
- * fehlendes Feld beim PUT als leer gelesen wird. Die Version
- * ist Optimistic Locking; bei 409 hat jemand anderes geändert, einmal neu laden
- * und erneut send.
+ * fehlendes Feld beim PUT als leer gelesen wird. Die Version ist Optimistic
+ * Locking: 409 heisst, jemand hat den PR zwischen Lesen und Schreiben geändert.
+ * Dann wird nicht wiederholt, sonst ginge dessen Änderung kommentarlos verloren.
  */
 export async function setDescription(
   config: BitbucketConfig,
@@ -152,11 +171,11 @@ export async function setDescription(
   id: number,
   description: string,
 ): Promise<PullRequest> {
-  const send = async () => {
-    const pr = await getPullRequest(config, repo, id)
-    if (pr.state !== "OPEN") {
-      throw new BitbucketError(`PR #${id} ist ${pr.state}, nicht offen. Description nicht geändert.`)
-    }
+  const pr = await getPullRequest(config, repo, id)
+  if (pr.state !== "OPEN") {
+    throw new BitbucketError(`PR #${id} ist ${pr.state}, nicht offen. Description nicht geändert.`)
+  }
+  try {
     const data = await request(config, "PUT", `${repoPath(repo)}/pull-requests/${id}`, {
       version: pr.version,
       title: pr.title,
@@ -164,11 +183,13 @@ export async function setDescription(
       reviewers: pr.reviewers,
     })
     return toPullRequest(data)
-  }
-  try {
-    return await send()
   } catch (error) {
-    if (error instanceof BitbucketError && error.status === 409) return await send()
+    if (error instanceof BitbucketError && error.status === 409) {
+      throw new BitbucketError(
+        `PR #${id} wurde gerade von jemand anderem geändert, nichts überschrieben. Erneut versuchen.`,
+        409,
+      )
+    }
     throw error
   }
 }

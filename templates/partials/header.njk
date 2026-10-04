@@ -1,12 +1,12 @@
-<header class="header">
-  <div class="brand">Plan</div>
+<header class="plan-header">
+  <div class="plan-brand">Plan</div>
   <h1>{{ plan.title }}</h1>
-  <div class="ticket">{{ plan.ticket }}</div>
-  <div class="header-meta">
+  <div class="plan-ticket">{{ plan.ticket }}</div>
+  <div class="plan-header-meta">
     <span>{{ plan.meta.createdAt | date }}</span>
     {% if plan.meta.branch %}<span>Branch: {{ plan.meta.branch }}</span>{% endif %}
     {% if plan.meta.repo %}<span>Repo: {{ plan.meta.repo }}</span>{% endif %}
     <span>{{ plan.steps | length }} Schritte</span>
   </div>
-  <p class="intent">{{ plan.intent }}</p>
+  <p class="plan-intent">{{ plan.intent }}</p>
 </header>

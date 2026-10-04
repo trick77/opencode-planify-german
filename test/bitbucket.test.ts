@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { resolve } from "node:path"
-import { parsePullRequestUrl, parseRemote, setDescription } from "../src/bitbucket.ts"
+import { getPullRequest, parsePullRequestUrl, parseRemote, setDescription } from "../src/bitbucket.ts"
 import { createPlanPrTool, MAX_DESCRIPTION_LENGTH } from "../src/tool-pr.ts"
 import { root } from "../src/render.ts"
 
@@ -103,6 +103,7 @@ test("Remote-URL ergibt Projekt und Repository für https, ssh und persönliche 
   assert.deepEqual(parseRemote("git@host:proj/app.git"), { projectKey: "proj", repoSlug: "app" })
   assert.deepEqual(parseRemote("ssh://git@host:7999/~jan/app.git"), { projectKey: "~jan", repoSlug: "app" })
   assert.throws(() => parseRemote("nicht-eine-url"), /nicht erkannt/)
+  assert.throws(() => parseRemote("git@host:proj/re%po.git"), /nicht erkannt/)
 })
 
 test("PR-URL aus dem Browser wird zerlegt, auch mit Kontextpfad und Benutzer-Repo", () => {
@@ -139,19 +140,47 @@ test("Description wird ersetzt, Titel und Reviewer gehen unverändert mit", asyn
   assert.ok(!bitbucket.calls.some((c) => c.method === "POST"), "kein PR angelegt, kein Kommentar")
 })
 
-test("Versionskonflikt wird einmal mit frisch geladener Version wiederholt", async () => {
+test("Versionskonflikt überschreibt nichts und wird gemeldet", async () => {
   // Given
   const prs = [pullRequest(7, "feature/SEP-1-x")]
   const bitbucket = fakeBitbucket(prs, { conflictsOnce: true })
   const config = { baseUrl: BASE, token: "t", fetch: bitbucket.fetch }
 
+  // When / Then
+  await assert.rejects(
+    setDescription(config, { projectKey: "PROJ", repoSlug: "app" }, 7, "neu"),
+    /gerade von jemand anderem geändert, nichts überschrieben/,
+  )
+  assert.equal(bitbucket.calls.filter((c) => c.method === "PUT").length, 1)
+  assert.equal(prs[0].description, "alt")
+})
+
+test("Bitbucket ohne Antwort bricht nach dem Timeout ab", async () => {
+  // Given: Verbindung steht, Antwort kommt nie
+  const hanging = ((_url: string, init: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(init.signal!.reason))
+    })) as typeof fetch
+  const config = { baseUrl: BASE, token: "t", fetch: hanging, timeoutMs: 50 }
+
+  // When / Then
+  await assert.rejects(getPullRequest(config, { projectKey: "PROJ", repoSlug: "app" }, 7), /antwortet nicht innerhalb von 0.05 s/)
+})
+
+test("PR-Suche nimmt den Upstream-Branch, wenn der lokale anders heisst", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-lang")])
+
   // When
-  const updated = await setDescription(config, { projectKey: "PROJ", repoSlug: "app" }, 7, "neu")
+  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch }, {
+    "rev-parse": "kurz",
+    config: "refs/heads/feature/SEP-1-lang",
+    remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
+  })
 
   // Then
-  assert.equal(bitbucket.calls.filter((c) => c.method === "PUT").length, 2)
-  assert.equal(prs[0].description, "neu")
-  assert.equal(updated.id, 7)
+  assert.match(result, /PR #7 ersetzt/)
+  assert.ok(bitbucket.calls[0].url.includes(encodeURIComponent("refs/heads/feature/SEP-1-lang")))
 })
 
 test("Branch ohne offenen PR ändert nichts und nennt den nächsten Schritt", async () => {

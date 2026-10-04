@@ -32,29 +32,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.sheet {
+.plan-sheet {
   max-width: 900px;
   margin: 0 auto;
   padding: 56px 28px 96px;
 }
 
 /* Kopf */
-.header { border-bottom: 1px solid var(--linie); padding-bottom: 28px; margin-bottom: 40px; }
-.brand {
+.plan-header { border-bottom: 1px solid var(--linie); padding-bottom: 28px; margin-bottom: 40px; }
+.plan-brand {
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--akzent-tief); background: var(--akzent-flaeche);
   border-radius: 999px; padding: 5px 12px; margin-bottom: 20px;
 }
-.brand::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--akzent); }
+.plan-brand::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--akzent); }
 h1 {
   font-family: var(--serif); font-weight: 600; font-size: 34px; line-height: 1.22;
   margin: 0 0 14px; letter-spacing: -0.01em;
 }
-.ticket { font-family: var(--mono); font-size: 13px; color: var(--text-leise); }
-.header-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--text-leise); margin-top: 8px; }
-.header-meta span { white-space: nowrap; }
-.intent { font-family: var(--serif); font-size: 19px; line-height: 1.6; margin: 24px 0 0; }
+.plan-ticket { font-family: var(--mono); font-size: 13px; color: var(--text-leise); }
+.plan-header-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--text-leise); margin-top: 8px; }
+.plan-header-meta span { white-space: nowrap; }
+.plan-intent { font-family: var(--serif); font-size: 19px; line-height: 1.6; margin: 24px 0 0; }
 
 /* Abschnitte */
 section { margin-bottom: 44px; }
@@ -66,18 +66,18 @@ h2 {
 p { margin: 0 0 12px; }
 p:last-child { margin-bottom: 0; }
 
-.context { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
-.context .card { background: var(--papier); border: 1px solid var(--linie-zart); border-radius: var(--radius); padding: 18px 20px; }
-.context .label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-leise); margin-bottom: 6px; }
+.plan-context { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+.plan-context .plan-card { background: var(--papier); border: 1px solid var(--linie-zart); border-radius: var(--radius); padding: 18px 20px; }
+.plan-context .plan-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-leise); margin-bottom: 6px; }
 
 /* Schritte */
-.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
-.step {
+.plan-steps { list-style: none; margin: 0; padding: 0; counter-reset: plan-step; }
+.plan-step {
   position: relative; background: var(--papier); border: 1px solid var(--linie-zart);
   border-radius: var(--radius); padding: 20px 22px 20px 24px; margin-bottom: 14px;
 }
-.step::before {
-  counter-increment: step; content: counter(step);
+.plan-step::before {
+  counter-increment: plan-step; content: counter(plan-step);
   position: absolute; left: -13px; top: 20px;
   width: 26px; height: 26px; border-radius: 50%;
   background: var(--akzent); color: #fff;
@@ -87,26 +87,26 @@ p:last-child { margin-bottom: 0; }
   line-height: 1;
   display: flex; align-items: center; justify-content: center;
 }
-.step h3 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0 0 8px; line-height: 1.35; }
-.rationale { color: var(--text-leise); font-size: 15px; margin: 0 0 14px; }
+.plan-step h3 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0 0 8px; line-height: 1.35; }
+.plan-rationale { color: var(--text-leise); font-size: 15px; margin: 0 0 14px; }
 
-.files { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--linie-zart); }
-.files li { padding: 10px 0; border-bottom: 1px solid var(--linie-zart); }
-.files li:last-child { border-bottom: none; padding-bottom: 0; }
-code, .path {
+.plan-files { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--linie-zart); }
+.plan-files li { padding: 10px 0; border-bottom: 1px solid var(--linie-zart); }
+.plan-files li:last-child { border-bottom: none; padding-bottom: 0; }
+code, .plan-path {
   font-family: var(--mono); font-size: 13px;
   background: var(--flaeche-tief); border-radius: 4px; padding: 1px 5px;
   word-break: break-all;
 }
-.files .change { display: block; margin-top: 5px; font-size: 15px; }
-.commands { list-style: none; margin: 14px 0 0; padding: 0; }
-.commands li {
+.plan-files .plan-change { display: block; margin-top: 5px; font-size: 15px; }
+.plan-commands { list-style: none; margin: 14px 0 0; padding: 0; }
+.plan-commands li {
   font-family: var(--mono); font-size: 13px; color: var(--text);
   background: var(--flaeche-tief); border-left: 2px solid var(--akzent);
   border-radius: 0 6px 6px 0; padding: 7px 10px; margin-bottom: 6px;
   overflow-x: auto; white-space: pre;
 }
-.commands li::before { content: "$ "; color: var(--text-leise); }
+.plan-commands li::before { content: "$ "; color: var(--text-leise); }
 
 /* Tabellen: Verifikation, Risiken */
 table { width: 100%; border-collapse: collapse; font-size: 15px; }
@@ -116,39 +116,39 @@ th {
 }
 td { padding: 12px 14px 12px 0; border-bottom: 1px solid var(--linie-zart); vertical-align: top; }
 td:last-child, th:last-child { padding-right: 0; }
-.table-wrap { overflow-x: auto; }
+.plan-table-wrap { overflow-x: auto; }
 
 /* Offene Entscheidungen */
-.decision {
+.plan-decision {
   background: var(--akzent-flaeche); border: 1px solid rgba(217, 119, 87, 0.28);
   border-radius: var(--radius); padding: 18px 20px; margin-bottom: 12px;
 }
-.decision .question { font-family: var(--serif); font-size: 18px; margin: 0 0 8px; }
-.decision dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 15px; }
-.decision dt { color: var(--akzent-tief); font-weight: 600; }
-.decision dd { margin: 0; }
+.plan-decision .plan-question { font-family: var(--serif); font-size: 18px; margin: 0 0 8px; }
+.plan-decision dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 15px; }
+.plan-decision dt { color: var(--akzent-tief); font-weight: 600; }
+.plan-decision dd { margin: 0; }
 
 /* Diagramm */
 figure { margin: 0; background: var(--papier); border: 1px solid var(--linie-zart); border-radius: var(--radius); padding: 22px; }
-figure .diagram { overflow-x: auto; }
+figure .plan-diagram { overflow-x: auto; }
 figure svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
 figcaption { margin-top: 14px; font-size: 14px; color: var(--text-leise); text-align: center; }
 
 /* Ausserhalb */
-.out-of-scope { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.out-of-scope li {
+.plan-out-of-scope { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-out-of-scope li {
   font-size: 14px; color: var(--text-leise);
   background: var(--papier); border: 1px solid var(--linie-zart);
   border-radius: 999px; padding: 5px 14px;
 }
-.out-of-scope li::before { content: "\2014\00a0"; }
+.plan-out-of-scope li::before { content: "\2014\00a0"; }
 
 /* Fuss */
-.footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--linie); font-size: 12px; color: var(--text-leise); font-family: var(--mono); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.plan-footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--linie); font-size: 12px; color: var(--text-leise); font-family: var(--mono); display: flex; flex-wrap: wrap; gap: 6px 18px; }
 
 @media (max-width: 860px) {
-  .context { grid-template-columns: 1fr; }
-  .sheet { padding: 36px 18px 64px; }
+  .plan-context { grid-template-columns: 1fr; }
+  .plan-sheet { padding: 36px 18px 64px; }
   h1 { font-size: 27px; }
 }
 
@@ -169,8 +169,8 @@ figcaption { margin-top: 14px; font-size: 14px; color: var(--text-leise); text-a
     --akzent-tief: #e89778;
     --akzent-flaeche: rgba(217, 119, 87, 0.14);
   }
-  .step::before { color: #1f1e1d; }
-  .decision { border-color: rgba(217, 119, 87, 0.34); }
+  .plan-step::before { color: #1f1e1d; }
+  .plan-decision { border-color: rgba(217, 119, 87, 0.34); }
   /* Fremde SVG bringen eigene Farben mit und wuerden auf dunklem Grund verschwinden.
      Die helle Insel braucht deshalb auch wieder helle Rand- und Textfarben. */
   figure { background: #faf9f5; border-color: rgba(31, 30, 29, 0.07); }
@@ -192,7 +192,7 @@ figcaption { margin-top: 14px; font-size: 14px; color: var(--text-leise); text-a
   }
   body { background: #fff; color: var(--text); }
   /* Der Dark-Block oben setzt hier eine dunkle Ziffer, die Regel gilt auch im Druck. */
-  .step::before { color: #fff; }
-  .sheet { max-width: none; padding: 0; }
-  .step, .context .card, figure { break-inside: avoid; }
+  .plan-step::before { color: #fff; }
+  .plan-sheet { max-width: none; padding: 0; }
+  .plan-step, .plan-context .plan-card, figure { break-inside: avoid; }
 }

@@ -1,6 +1,8 @@
-{# Markdown für die Description eines Bitbucket-Data-Center-Pull-Requests. Bitbucket
-   entfernt HTML, deshalb keine Tags; Prosa läuft durch den Filter "text", Tabellenzellen
-   durch "cell", Pfade und Kommandos durch "code". #}
+{# Markdown für die Description eines Bitbucket-Data-Center-PRs. Nur was Bitbucket
+   dokumentiert unterstützt: Überschriften, Fett, Listen, Code-Spans, ```-Blöcke, "---".
+   Keine Tabellen: "|" lässt sich dort nicht escapen. Prosa läuft durch "text" (eine
+   Zeile, escapt), Pfade und Kommandos durch "code". Umbrochen wird danach in
+   wrapProse. #}
 # {{ plan.title | text }}
 
 {% if plan.ticket %}**{{ plan.ticket | text }}** · {% endif %}{{ plan.meta.createdAt | date }}{% if plan.meta.branch %} · Branch {{ plan.meta.branch | code }}{% endif %}{% if plan.meta.repo %} · Repo {{ plan.meta.repo | code }}{% endif %} · {{ plan.steps | length }} Schritte
@@ -18,7 +20,7 @@
 
 ## {{ plan.diagram.title | text }}
 
-_Das Diagramm steht nur im HTML-Plan, Bitbucket stellt kein SVG dar._
+Das Diagramm steht nur im HTML-Plan, Bitbucket stellt kein SVG dar.
 {% endif %}
 
 ## Schritte
@@ -27,7 +29,7 @@ _Das Diagramm steht nur im HTML-Plan, Bitbucket stellt kein SVG dar._
 ### {{ loop.index }}. {{ step.title | text }}
 {% if step.rationale %}
 
-_{{ step.rationale | text }}_
+{{ step.rationale | text }}
 {% endif %}
 
 {% for file in step.files %}
@@ -41,19 +43,16 @@ _{{ step.rationale | text }}_
 
 ## Verifikation
 
-| Vorgehen | Erwartung |
-| --- | --- |
 {% for entry in plan.verification %}
-| {{ entry.how | code | cell }} | {{ entry.expected | text | cell }} |
+- {{ entry.how | code }} — {{ entry.expected | text }}
 {% endfor %}
 {% if plan.risks and plan.risks | length %}
 
 ## Risiken
 
-| Risiko | Gegenmassnahme |
-| --- | --- |
 {% for entry in plan.risks %}
-| {{ entry.risk | text | cell }} | {{ entry.mitigation | text | cell }} |
+- {{ entry.risk | text }}
+  - **Gegenmassnahme:** {{ entry.mitigation | text }}
 {% endfor %}
 {% endif %}
 {% if plan.openDecisions and plan.openDecisions | length %}
@@ -78,4 +77,4 @@ _{{ step.rationale | text }}_
 
 ---
 
-_Erzeugt von planify aus {{ (baseName + ".plan.json") | code }}. Änderungen am Plan dort, diese Description wird beim nächsten Abgleich überschrieben._
+Erzeugt von planify aus {{ (baseName + ".plan.json") | code }}. Änderungen am Plan dort, diese Description wird beim nächsten Abgleich überschrieben.
