@@ -335,7 +335,7 @@ test("ohne Token oder URL kein Aufruf, dafür der Installationsbefehl", async ()
 
   // Then
   assert.match(withoutToken, /kein Bitbucket-Token/)
-  assert.match(withoutToken, /opencode-planify-german-bitbucket/)
+  assert.match(withoutToken, /opencode-presets install opencode-planify-german --set bitbucketUrl=/)
   assert.match(withoutUrl, /keine Bitbucket-URL/)
   assert.equal(bitbucket.calls.length, 0)
 })

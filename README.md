@@ -36,11 +36,12 @@ maschinenlesbare Fassung.
 npx opencode-presets install opencode-planify-german
 ```
 
-Das Bundle installiert die drei Teile zusammen: das Plugin mit dem Tool
-`plan_render` aus der npm-Registry (auf die Version gepinnt), die Regeldatei nach
-`instructions` und den Skill nach `skills.paths`.
+Das Bundle installiert die drei Teile zusammen: das Plugin mit den Tools
+`plan_render` und `plan_pr` aus der npm-Registry (auf die Version gepinnt), die
+Regeldatei nach `instructions` und den Skill nach `skills.paths`. Es fragt die
+Bitbucket-URL und einen HTTP Access Token ab, die `plan_pr` braucht.
 
-Der Installer schreibt für das Plugin nur den Paket-Spec nach `opencode.json`;
+Der Installer schreibt für das Plugin den Paket-Spec samt Optionen nach `opencode.json`;
 geladen wird das Paket beim nächsten Start von opencode. Also opencode einmal neu
 starten, dann prüfen:
 
@@ -80,17 +81,18 @@ Description wird vollständig ersetzt, Titel und Reviewer bleiben. Ein Diagramm
 fehlt dort, Bitbucket stellt kein SVG dar.
 
 Projekt und Repository kommen aus `origin`, die Basis-URL und ein HTTP Access
-Token aus den Plugin-Optionen:
+Token aus den Plugin-Optionen. Das Bundle fragt beide bei der Installation ab;
+ohne Terminal-Eingabe:
 
 ```sh
 export BITBUCKET_TOKEN=…
-npx opencode-presets install opencode-planify-german-bitbucket \
+npx opencode-presets install opencode-planify-german \
   --set bitbucketUrl=https://bitbucket.example.com --set-env bitbucketToken=BITBUCKET_TOKEN
 ```
 
-Der Token steht danach im Klartext in `opencode.json`. Alternativ ohne Bundle
-die Umgebungsvariablen `PLANIFY_BITBUCKET_URL` und `PLANIFY_BITBUCKET_TOKEN`
-setzen. Der Token geht nur an die konfigurierte Instanz: eine PR-URL auf einem
+Der Token steht danach im Klartext in `opencode.json`. Ohne Plugin-Optionen
+greifen die Umgebungsvariablen `PLANIFY_BITBUCKET_URL` und
+`PLANIFY_BITBUCKET_TOKEN`. Der Token geht nur an die konfigurierte Instanz: eine PR-URL auf einem
 anderen Host lehnt `plan_pr` ab.
 
 ## Browser

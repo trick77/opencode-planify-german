@@ -22,7 +22,7 @@ const z = tool.schema
 export const MAX_DESCRIPTION_LENGTH = 32_000
 
 const INSTALL_HINT =
-  "npx opencode-presets install opencode-planify-german-bitbucket " +
+  "npx opencode-presets install opencode-planify-german " +
   "--set bitbucketUrl=https://<bitbucket-host> --set-env bitbucketToken=<ENV_VAR_MIT_TOKEN>"
 
 export type PrToolOptions = {
@@ -93,7 +93,7 @@ export function createPlanPrTool(options: PrToolOptions = {}) {
       if (!token) {
         return [
           "PR nicht geändert — kein Bitbucket-Token konfiguriert.",
-          "Bundle mit Token installieren und opencode neu starten:",
+          "planify mit Token neu installieren und opencode neu starten:",
           `  ${INSTALL_HINT}`,
           "Alternativ Umgebungsvariable PLANIFY_BITBUCKET_TOKEN setzen.",
         ].join("\n")
@@ -123,7 +123,7 @@ export function createPlanPrTool(options: PrToolOptions = {}) {
       if (!configuredUrl) {
         return [
           "PR nicht geändert — keine Bitbucket-URL konfiguriert.",
-          `Bundle mit URL installieren: ${INSTALL_HINT}`,
+          `planify mit URL neu installieren: ${INSTALL_HINT}`,
           "Alternativ Umgebungsvariable PLANIFY_BITBUCKET_URL setzen.",
         ].join("\n")
       }
