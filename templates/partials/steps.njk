@@ -1,0 +1,24 @@
+<section>
+  <h2>Schritte</h2>
+  <ol class="plan-steps">
+    {% for step in plan.steps %}
+    <li class="plan-step">
+      <h3>{{ step.title }}</h3>
+      {% if step.rationale %}<p class="plan-rationale">{{ step.rationale }}</p>{% endif %}
+      <ul class="plan-files">
+        {% for file in step.files %}
+        <li>
+          <span class="plan-path">{{ file.path }}</span>
+          <span class="plan-change">{{ file.change }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if step.commands and step.commands | length %}
+      <ul class="plan-commands">
+        {% for command in step.commands %}<li>{{ command }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>

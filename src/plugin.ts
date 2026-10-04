@@ -1,18 +1,24 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { erstellePlanRenderTool } from "./tool.ts"
+import { createPlanRenderTool } from "./tool.ts"
+import { createPlanPrTool } from "./tool-pr.ts"
+
+const stringOption = (value: unknown) => (typeof value === "string" ? value : undefined)
 
 /**
- * Registriert das Tool `plan_render`. Damit ist planify über den
+ * Registriert die Tools `plan_render` und `plan_pr`. Damit ist planify über den
  * `plugin`-Eintrag in opencode.json installierbar, ohne Symlink in
  * ~/.config/opencode/tool.
  *
- * Option `openWith` überschreibt das Kommando zum Öffnen der Plan-Datei; ohne
+ * Optionen: `openWith` überschreibt das Kommando zum Öffnen der Plan-Datei, ohne
  * Angabe gewinnt der Standard-Handler des Systems (open, xdg-open, start).
+ * `bitbucketUrl` und `bitbucketToken` braucht `plan_pr`.
  */
-export const PlanifyPlugin: Plugin = async (_input, optionen) => ({
+export const PlanifyPlugin: Plugin = async (_input, options) => ({
   tool: {
-    plan_render: erstellePlanRenderTool({
-      openWith: typeof optionen?.openWith === "string" ? optionen.openWith : undefined,
+    plan_render: createPlanRenderTool({ openWith: stringOption(options?.openWith) }),
+    plan_pr: createPlanPrTool({
+      bitbucketUrl: stringOption(options?.bitbucketUrl),
+      bitbucketToken: stringOption(options?.bitbucketToken),
     }),
   },
 })

@@ -1,0 +1,14 @@
+{% if plan.openDecisions and plan.openDecisions | length %}
+<section>
+  <h2>Offene Entscheidungen</h2>
+  {% for entry in plan.openDecisions %}
+  <div class="plan-decision">
+    <p class="plan-question">{{ entry.question }}</p>
+    <dl>
+      <dt>Empfehlung</dt><dd>{{ entry.recommendation }}</dd>
+      <dt>Abwägung</dt><dd>{{ entry.tradeoff }}</dd>
+    </dl>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}

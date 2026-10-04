@@ -1,33 +1,32 @@
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
-import { readFileSync } from "node:fs"
-import { rendere, dateiname } from "./render.ts"
+import { baseName, render } from "./render.ts"
 
-const argumente = process.argv.slice(2)
-const planPfad = argumente.find((a) => !a.startsWith("--"))
-if (!planPfad) {
+const argv = process.argv.slice(2)
+const planArg = argv.find((a) => !a.startsWith("--"))
+if (!planArg) {
   console.error("Aufruf: npm run render -- <plan.json> [--out <verzeichnis>] [--template plan.njk]")
   process.exit(2)
 }
-const holeOption = (name: string) => {
-  const i = argumente.indexOf(`--${name}`)
-  return i >= 0 ? argumente[i + 1] : undefined
+const getOption = (name: string) => {
+  const i = argv.indexOf(`--${name}`)
+  return i >= 0 ? argv[i + 1] : undefined
 }
 
-const absoluterPlan = resolve(process.cwd(), planPfad)
-const plan = JSON.parse(readFileSync(absoluterPlan, "utf8"))
-const ausgabe = resolve(process.cwd(), holeOption("out") ?? dirname(absoluterPlan))
+const planPath = resolve(process.cwd(), planArg)
+const plan = JSON.parse(readFileSync(planPath, "utf8"))
+const outDir = resolve(process.cwd(), getOption("out") ?? dirname(planPath))
 
-let ergebnis
+let result
 try {
-  ergebnis = rendere(plan, { basis: dirname(absoluterPlan), template: holeOption("template") })
-} catch (fehler) {
-  console.error(String((fehler as Error).message))
+  result = render(plan, { baseDir: dirname(planPath), template: getOption("template") })
+} catch (error) {
+  console.error(String((error as Error).message))
   process.exit(1)
 }
 
-mkdirSync(ausgabe, { recursive: true })
-const ziel = resolve(ausgabe, `${dateiname(plan)}.html`)
-writeFileSync(ziel, ergebnis.html, "utf8")
-for (const w of ergebnis.warnungen) console.warn(`Warnung ${w.pfad}: ${w.meldung}`)
-console.log(ziel)
+mkdirSync(outDir, { recursive: true })
+const target = resolve(outDir, `${baseName(plan)}.html`)
+writeFileSync(target, result.html, "utf8")
+for (const w of result.warnings) console.warn(`Warnung ${w.path}: ${w.message}`)
+console.log(target)
