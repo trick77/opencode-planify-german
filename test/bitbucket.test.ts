@@ -156,10 +156,15 @@ test("Versionskonflikt überschreibt nichts und wird gemeldet", async () => {
 })
 
 test("Bitbucket ohne Antwort bricht nach dem Timeout ab", async () => {
-  // Given: Verbindung steht, Antwort kommt nie
+  // Given: Verbindung steht, Antwort kommt nie. Der Timer von AbortSignal.timeout
+  // hält die Event-Loop nicht offen, das Intervall schon, sonst bricht node:test ab.
   const hanging = ((_url: string, init: RequestInit) =>
     new Promise((_resolve, reject) => {
-      init.signal?.addEventListener("abort", () => reject(init.signal!.reason))
+      const keepAlive = setInterval(() => {}, 1000)
+      init.signal?.addEventListener("abort", () => {
+        clearInterval(keepAlive)
+        reject(init.signal!.reason)
+      })
     })) as typeof fetch
   const config = { baseUrl: BASE, token: "t", fetch: hanging, timeoutMs: 50 }
 
