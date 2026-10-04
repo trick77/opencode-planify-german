@@ -94,12 +94,19 @@ export function parsePullRequestUrl(prUrl: string): PullRequestRef {
   }
 }
 
+/** Vergleichbare Form einer Basis-URL: Origin plus Kontextpfad, ohne Schrägstrich am Ende. */
+export function normalizeBaseUrl(url: string): string {
+  const parsed = new URL(url)
+  return parsed.origin + parsed.pathname.replace(/\/+$/, "")
+}
+
 function repoPath(repo: RepoRef): string {
   return `/rest/api/latest/projects/${encodeURIComponent(repo.projectKey)}/repos/${encodeURIComponent(repo.repoSlug)}`
 }
 
 async function request(config: BitbucketConfig, method: string, path: string, body?: unknown): Promise<any> {
-  const url = config.baseUrl.replace(/\/+$/, "") + path
+  // baseUrl ist normalisiert (normalizeBaseUrl), der Pfad beginnt mit "/".
+  const url = config.baseUrl + path
   const doFetch = config.fetch ?? fetch
   const timeoutMs = config.timeoutMs ?? REQUEST_TIMEOUT_MS
   const signal = AbortSignal.timeout(timeoutMs)
@@ -133,10 +140,21 @@ async function request(config: BitbucketConfig, method: string, path: string, bo
     const message = data?.errors?.map((e: any) => e.message).filter(Boolean).join("; ") || response.statusText
     throw new BitbucketError(`Bitbucket antwortet ${response.status} auf ${method} ${path}: ${message}`, response.status)
   }
+  // 2xx ohne JSON-Objekt: typisch die Login-Seite eines SSO-Proxys. Nicht als leere
+  // Antwort weiterreichen, sonst hiesse es "kein offener PR" statt Anmeldeproblem.
+  if (!data || typeof data !== "object") {
+    throw new BitbucketError(
+      `Bitbucket antwortet ${response.status} auf ${method} ${path} ohne JSON (Login-Seite eines Proxys? Token und URL prüfen).`,
+      response.status,
+    )
+  }
   return data
 }
 
 function toPullRequest(data: any): PullRequest {
+  if (typeof data.id !== "number" || typeof data.version !== "number") {
+    throw new BitbucketError("Antwort von Bitbucket ist kein Pull-Request (id/version fehlen).")
+  }
   return {
     id: data.id,
     version: data.version,
@@ -144,7 +162,10 @@ function toPullRequest(data: any): PullRequest {
     title: data.title,
     targetBranch: data.toRef?.displayId ?? data.toRef?.id ?? "?",
     url: data.links?.self?.[0]?.href ?? "",
-    reviewers: (data.reviewers ?? []).map((r: any) => ({ user: { name: r.user?.name } })),
+    // Nur Reviewer mit Namen: ein {user:{}} lässt Bitbucket das ganze Update ablehnen.
+    reviewers: (data.reviewers ?? [])
+      .filter((r: any) => typeof r.user?.name === "string")
+      .map((r: any) => ({ user: { name: r.user.name } })),
   }
 }
 
@@ -152,7 +173,8 @@ function toPullRequest(data: any): PullRequest {
 export async function findOpenPullRequests(config: BitbucketConfig, repo: RepoRef, branch: string): Promise<PullRequest[]> {
   const query = new URLSearchParams({ at: `refs/heads/${branch}`, direction: "OUTGOING", state: "OPEN", limit: "25" })
   const data = await request(config, "GET", `${repoPath(repo)}/pull-requests?${query}`)
-  return (data?.values ?? []).map(toPullRequest)
+  if (!Array.isArray(data.values)) throw new BitbucketError("Antwort von Bitbucket enthält keine PR-Liste.")
+  return data.values.map(toPullRequest)
 }
 
 export async function getPullRequest(config: BitbucketConfig, repo: RepoRef, id: number): Promise<PullRequest> {
@@ -175,14 +197,16 @@ export async function setDescription(
   if (pr.state !== "OPEN") {
     throw new BitbucketError(`PR #${id} ist ${pr.state}, nicht offen. Description nicht geändert.`)
   }
+  const uncertain = (message: string) =>
+    new BitbucketError(`${message} Ob die Description geschrieben wurde, im PR #${id} prüfen.`)
+  let data: any
   try {
-    const data = await request(config, "PUT", `${repoPath(repo)}/pull-requests/${id}`, {
+    data = await request(config, "PUT", `${repoPath(repo)}/pull-requests/${id}`, {
       version: pr.version,
       title: pr.title,
       description,
       reviewers: pr.reviewers,
     })
-    return toPullRequest(data)
   } catch (error) {
     if (error instanceof BitbucketError && error.status === 409) {
       throw new BitbucketError(
@@ -190,6 +214,13 @@ export async function setDescription(
         409,
       )
     }
+    // 2xx mit unbrauchbarer Antwort: das PUT kann durch sein.
+    if (error instanceof BitbucketError && error.status !== undefined && error.status < 300) throw uncertain(error.message)
     throw error
+  }
+  try {
+    return toPullRequest(data)
+  } catch (error) {
+    throw uncertain((error as Error).message)
   }
 }

@@ -281,18 +281,34 @@ test("Markdown escapt nur dokumentierte Zeichen und hält Prosa auf einer Zeile"
   assert.doesNotMatch(markdown, /&lt;|&amp;|\n\|/)
 })
 
+test("Prosa, die mit 1) oder einem Codezaun beginnt, wird keine Liste und kein Codeblock", () => {
+  // Given
+  const plan = example()
+  plan.intent = "1) Erst das Schema anpassen, danach die Mapper neu generieren lassen."
+  plan.steps[0].rationale = "```js wäre hier falsch"
+
+  // When
+  const { markdown } = renderMarkdown(plan)
+
+  // Then
+  assert.ok(markdown.includes("\n1\\) Erst das Schema anpassen, danach die Mapper neu generieren lassen.\n"))
+  assert.ok(markdown.includes("\n\\`\\`\\`js wäre hier falsch\n"))
+  assert.equal(markdown.split("\n").filter((line) => line.startsWith("```")).length, 2)
+})
+
 test("Kommandos mit Leerzeilen bleiben im Codeblock unverändert, ``` im Kommando wird eingerückt", () => {
   // Given
   const plan = example()
   plan.steps[0].commands = ["cat <<EOF", "", "", "EOF"]
-  plan.steps[1].commands = ["echo ```"]
+  plan.steps[1].commands = ["echo '```' && rm *.tmp", "", "", "echo fertig"]
 
   // When
   const { markdown } = renderMarkdown(plan)
 
   // Then
   assert.ok(markdown.includes("```sh\ncat <<EOF\n\n\nEOF\n```"))
-  assert.ok(markdown.includes("\n    echo ```\n"))
+  // "Kommandos:" beendet die Dateiliste, sonst wäre der Block Teil des letzten Punkts
+  assert.ok(markdown.includes("\n\nKommandos:\n\n    echo '```' && rm *.tmp\n    \n    \n    echo fertig\n"))
 })
 
 test("Prosa bricht bei 110 Zeichen um, Listenpunkte bei 90 mit hängendem Einzug", () => {

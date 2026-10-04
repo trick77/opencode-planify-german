@@ -1,10 +1,11 @@
-import { execFileSync } from "node:child_process"
+import { execFile } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { isAbsolute, resolve } from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import {
   BitbucketError,
   findOpenPullRequests,
+  normalizeBaseUrl,
   parsePullRequestUrl,
   parseRemote,
   setDescription,
@@ -30,26 +31,36 @@ export type PrToolOptions = {
   env?: Record<string, string | undefined>
   fetch?: typeof fetch
   /** git-Aufruf überschreibbar für Tests. */
-  git?: (args: string[], cwd: string) => string
+  git?: Git
 }
 
-function runGit(args: string[], cwd: string): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim()
+type Git = (args: string[], cwd: string) => Promise<string>
+
+// Asynchron: ein synchroner Aufruf blockiert den ganzen opencode-Prozess.
+function runGit(args: string[], cwd: string): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    execFile("git", args, { cwd, encoding: "utf8" }, (error, stdout, stderr) => {
+      if (error) reject(new Error(stderr.trim() || error.message))
+      else resolvePromise(stdout.trim())
+    })
+  })
 }
 
-// Vergleichbare Form einer Basis-URL: Origin plus Kontextpfad, ohne Schrägstrich am Ende.
-function normalizeBaseUrl(url: string): string {
-  const parsed = new URL(url)
-  return parsed.origin + parsed.pathname.replace(/\/+$/, "")
-}
+type BranchTarget = { local: string; pushBranch?: string; remoteName: string }
 
-// git config ohne Treffer endet mit Exit-Code 1, das ist hier kein Fehler.
-function optionalGit(git: (args: string[], cwd: string) => string, args: string[], cwd: string): string | undefined {
-  try {
-    return git(args, cwd) || undefined
-  } catch {
-    return undefined
-  }
+/**
+ * Lokaler Branch und, falls konfiguriert, wohin er gepusht wird. Bewusst nicht der
+ * Upstream: nach "checkout -b feature origin/master" zeigt der auf master, und die
+ * PR-Suche träfe einen fremden PR.
+ */
+async function branchTarget(git: Git, cwd: string): Promise<BranchTarget | undefined> {
+  const local = await git(["rev-parse", "--abbrev-ref", "HEAD"], cwd)
+  if (local === "HEAD") return undefined
+  const push = await git(["for-each-ref", "--format=%(push:remotename)%00%(push)", `refs/heads/${local}`], cwd)
+  const [remoteName, pushRef] = push.split("\0")
+  const prefix = remoteName ? `refs/remotes/${remoteName}/` : ""
+  const pushBranch = remoteName && pushRef?.startsWith(prefix) ? pushRef.slice(prefix.length) : undefined
+  return { local, pushBranch, remoteName: remoteName || "origin" }
 }
 
 function describePullRequest(pr: PullRequest): string {
@@ -140,24 +151,25 @@ export function createPlanPrTool(options: PrToolOptions = {}) {
           repo = ref
           id = ref.id
         } else {
-          let branch: string
+          let target: BranchTarget | undefined
           let remote: string
           try {
-            const local = git(["rev-parse", "--abbrev-ref", "HEAD"], context.directory)
-            if (local === "HEAD") {
+            target = await branchTarget(git, context.directory)
+            if (!target) {
               return "PR nicht geändert — kein Branch ausgecheckt (detached HEAD). Branch auschecken oder PR-URL angeben."
             }
-            // Der PR hängt am Branch auf dem Server. Heisst der lokale Branch anders
-            // (checkout -b kurz origin/feature/…), zählt der Upstream.
-            const upstream = optionalGit(git, ["config", "--get", `branch.${local}.merge`], context.directory)
-            branch = upstream?.replace(/^refs\/heads\//, "") || local
-            const remoteName = optionalGit(git, ["config", "--get", `branch.${local}.remote`], context.directory) || "origin"
-            remote = git(["remote", "get-url", remoteName === "." ? "origin" : remoteName], context.directory)
+            remote = await git(["remote", "get-url", target.remoteName], context.directory)
           } catch (error) {
             return `PR nicht geändert — git-Abfrage fehlgeschlagen: ${(error as Error).message}`
           }
           repo = parseRemote(remote)
-          const open = await findOpenPullRequests(config, repo, branch)
+          // Erst der lokale Name, dann das Push-Ziel, falls es anders heisst.
+          let branch = target.local
+          let open = await findOpenPullRequests(config, repo, branch)
+          if (open.length === 0 && target.pushBranch && target.pushBranch !== target.local) {
+            branch = target.pushBranch
+            open = await findOpenPullRequests(config, repo, branch)
+          }
           if (open.length === 0) {
             return [
               `PR nicht geändert — kein offener PR für Branch ${branch} in ${repo.projectKey}/${repo.repoSlug}.`,

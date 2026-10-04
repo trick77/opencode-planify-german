@@ -78,13 +78,17 @@ function planFile(change?: (plan: any) => void): string {
 function runTool(
   args: { path: string; prUrl?: string },
   options: Parameters<typeof createPlanPrTool>[0],
-  git: Record<string, string> = { "rev-parse": "feature/SEP-1-x", remote: "ssh://git@bitbucket.example.com:7999/proj/app.git" },
+  git: Record<string, string> = {
+    "rev-parse": "feature/SEP-1-x",
+    "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-x",
+    remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
+  },
 ) {
   const tool = createPlanPrTool({
     bitbucketUrl: BASE,
     bitbucketToken: "geheim",
     env: {},
-    git: (gitArgs) => {
+    git: async (gitArgs) => {
       const answer = git[gitArgs[0]]
       if (answer === undefined) throw new Error(`git ${gitArgs.join(" ")} fehlgeschlagen`)
       return answer
@@ -172,20 +176,79 @@ test("Bitbucket ohne Antwort bricht nach dem Timeout ab", async () => {
   await assert.rejects(getPullRequest(config, { projectKey: "PROJ", repoSlug: "app" }, 7), /antwortet nicht innerhalb von 0.05 s/)
 })
 
-test("PR-Suche nimmt den Upstream-Branch, wenn der lokale anders heisst", async () => {
+test("PR-Suche nimmt das Push-Ziel, wenn der lokale Branch anders heisst", async () => {
   // Given
   const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-lang")])
 
   // When
   const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch }, {
     "rev-parse": "kurz",
-    config: "refs/heads/feature/SEP-1-lang",
+    "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-lang",
     remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
   })
 
   // Then
   assert.match(result, /PR #7 ersetzt/)
-  assert.ok(bitbucket.calls[0].url.includes(encodeURIComponent("refs/heads/feature/SEP-1-lang")))
+  assert.ok(bitbucket.calls.some((c) => c.url.includes(encodeURIComponent("refs/heads/feature/SEP-1-lang"))))
+})
+
+// checkout -b feature origin/master setzt master als Upstream. Der Upstream darf
+// nie die Suche bestimmen, sonst träfe sie einen fremden PR mit Quelle master.
+test("Upstream master führt nie zum PR von master", async () => {
+  // Given
+  const prs = [pullRequest(5, "master", { title: "Release" })]
+  const bitbucket = fakeBitbucket(prs)
+
+  // When
+  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch }, {
+    "rev-parse": "feature/neu",
+    "for-each-ref": "origin\0refs/remotes/origin/feature/neu",
+    remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
+  })
+
+  // Then
+  assert.match(result, /kein offener PR für Branch feature\/neu/)
+  assert.ok(!bitbucket.calls.some((c) => c.method === "PUT"))
+  assert.equal(prs[0].description, "alt")
+})
+
+test("2xx ohne JSON wird als Anmeldeproblem gemeldet, nicht als fehlender PR", async () => {
+  // Given: SSO-Proxy liefert eine Login-Seite mit 200
+  const loginPage = (async () => new Response("<html>Login</html>", { status: 200 })) as typeof fetch
+
+  // When
+  const result = await runTool({ path: planFile() }, { fetch: loginPage })
+
+  // Then
+  assert.match(result, /ohne JSON \(Login-Seite eines Proxys\?/)
+  assert.doesNotMatch(result, /kein offener PR/)
+})
+
+test("unbrauchbare Antwort auf das PUT sagt, dass der PR zu prüfen ist", async () => {
+  // Given
+  const prs = [pullRequest(7, "feature/SEP-1-x")]
+  const real = fakeBitbucket(prs)
+  const emptyPut = (async (input: string, init: RequestInit = {}) =>
+    init.method === "PUT" ? new Response(null, { status: 204 }) : real.fetch(input, init)) as typeof fetch
+
+  // When
+  const result = await runTool({ path: planFile() }, { fetch: emptyPut })
+
+  // Then
+  assert.match(result, /im PR #7 prüfen/)
+})
+
+test("Reviewer ohne Namen gehen nicht ins PUT", async () => {
+  // Given
+  const prs = [pullRequest(7, "feature/SEP-1-x", { reviewers: [{ user: { name: "a" } }, { user: {} }, {}] })]
+  const bitbucket = fakeBitbucket(prs)
+
+  // When
+  await runTool({ path: planFile() }, { fetch: bitbucket.fetch })
+
+  // Then
+  const put = bitbucket.calls.find((c) => c.method === "PUT")!
+  assert.deepEqual(put.body.reviewers, [{ user: { name: "a" } }])
 })
 
 test("Branch ohne offenen PR ändert nichts und nennt den nächsten Schritt", async () => {

@@ -173,8 +173,11 @@ function escapeText(value: unknown): string {
     .split(INLINE_CODE)
     .map((part, i) => (i % 2 === 1 ? part : part.replace(/([\\*_[\]])/g, "\\$1")))
     .join("")
-  // Blockmarker am Anfang: "# x", "+ x", "- x", "> x", "1. x".
-  return escaped.replace(/^([#+>-])/, "\\$1").replace(/^(\d+)\./, "$1\\.")
+  // Blockmarker am Anfang: "# x", "+ x", "- x", "> x", "1. x", "1) x", Codezaun.
+  return escaped
+    .replace(/^([#+>-])/, "\\$1")
+    .replace(/^(\d+)([.)])/, "$1\\$2")
+    .replace(/^(`{3,}|~{3,})/, (fence) => fence.replace(/./g, "\\$&"))
 }
 
 // Code-Span mit mehr Backticks als im Inhalt, damit ein Backtick im Pfad oder
@@ -187,11 +190,14 @@ function codeSpan(value: unknown): string {
 }
 
 // Bitbucket dokumentiert nur ```-Blöcke. Enthält ein Kommando selbst ```, wird
-// eingerückt (vier Leerzeichen), das ist die zweite dokumentierte Form.
+// eingerückt (vier Leerzeichen), das ist die zweite dokumentierte Form. Die Zeile
+// "Kommandos:" davor beendet die Dateiliste; direkt nach einem Listenpunkt wäre
+// der eingerückte Block sonst ein Absatz in diesem Punkt. Leerzeilen im Block
+// tragen den Einzug, damit collapseBlankLines sie nicht zusammenzieht.
 function codeBlock(lines: string[]): string {
   const text = lines.join("\n")
-  if (text.includes("```")) return text.split("\n").map((line) => `    ${line}`).join("\n")
-  return "```sh\n" + text + "\n```"
+  if (!text.includes("```")) return "```sh\n" + text + "\n```"
+  return "Kommandos:\n\n" + text.split("\n").map((line) => `    ${line}`).join("\n")
 }
 
 function longestBacktickRun(text: string): number {
@@ -205,7 +211,7 @@ function collapseBlankLines(markdown: string): string {
   let inFence = false
   for (const line of markdown.split("\n")) {
     if (line.startsWith("```")) inFence = !inFence
-    else if (!inFence && line.trim() === "" && out.length && out[out.length - 1].trim() === "") continue
+    else if (!inFence && line === "" && out.length && out[out.length - 1] === "") continue
     out.push(line)
   }
   return out.join("\n").trim() + "\n"
