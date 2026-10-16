@@ -103,17 +103,19 @@ SVG, keine Mermaid-Blöcke im Plan.
 
 ## PR-Description
 
-Auf Verlangen des Benutzers schreibt `plan_pr` einen gerenderten Plan als Markdown
-in die Description eines offenen Bitbucket-Data-Center-PRs.
+`pr_summary` schreibt eine Zusammenfassung in die Description eines offenen
+Bitbucket-Data-Center-PRs. Ist die Umsetzung fertig und der Branch gepusht, bietet
+das Modell es einmal an; geschrieben wird erst nach Ja.
 
 | Argument | Pflicht | Inhalt |
 | --- | --- | --- |
-| `path` | ja | Pfad zur `.plan.json` aus dem Ergebnis von `plan_render`. |
+| `summary` | ja | 3-4 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung. |
 | `prUrl` | nein | PR-URL aus dem Browser. Nur bei mehreren offenen PRs oder einem PR ausserhalb des aktuellen Branches. |
 
-Die Description wird vollständig ersetzt, Titel und Reviewer bleiben. Kein
-Diagramm: Bitbucket stellt kein SVG dar, die Description verweist auf den
-HTML-Plan. `plan_pr` legt nie einen PR an und schreibt nie einen Kommentar.
+Weniger als 3 oder mehr als 4 Absätze lehnt das Tool ab, ohne Bitbucket
+anzufassen. Escapt und bei 110 Zeichen umbrochen wird im Tool. Die Description
+wird vollständig ersetzt, Titel und Reviewer bleiben. `pr_summary` legt nie einen
+PR an und schreibt nie einen Kommentar.
 
 ## Beispiel
 

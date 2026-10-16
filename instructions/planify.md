@@ -83,21 +83,26 @@ dass opencode danach neu starten muss.
   `diagram-design` nutzen, als `.svg` exportieren, Pfad in `diagram.svgPath` —
   planify bettet es inline ein.
 
-## Plan in die PR-Description (Bitbucket Data Center)
+## Zusammenfassung in die PR-Description (Bitbucket Data Center)
 
-Nur wenn der Benutzer es verlangt ("Plan in den PR"). Dann das Tool `plan_pr`
-mit dem Pfad zur `.plan.json`, die `plan_render` gemeldet hat. Es sucht den
+Ist die Umsetzung fertig und der Branch gepusht, von dir aus anbieten: "Soll ich
+eine Zusammenfassung in die PR-Description schreiben?" Einmal pro Branch, nicht
+nach jedem Commit. Erst nach Ja das Tool `pr_summary` aufrufen; verlangt der
+Benutzer es selbst ("Zusammenfassung in den PR"), ohne Rückfrage. Es sucht den
 offenen PR des aktuellen Branches selbst; eine PR-URL nur übergeben, wenn der
-Benutzer eine nennt oder `plan_pr` mehrere PRs auflistet — dann den Benutzer
+Benutzer eine nennt oder `pr_summary` mehrere PRs auflistet — dann den Benutzer
 fragen, welcher gemeint ist.
 
-- Ziel ist immer die Description, nie ein Kommentar. Nie selbst Markdown für den
-  PR schreiben, nie per API, `curl` oder Browser an Bitbucket vorbei.
-- `plan_pr` ersetzt die ganze Description. Hat der Plan sich geändert: erst
-  `plan_render`, dann `plan_pr`.
+- Inhalt: 3-4 Absätze Prosa, getrennt durch eine Leerzeile. Aufgabe, Problem
+  oder Herausforderung, Lösung — die umgesetzte, nicht die geplante. Nicht der
+  Plan, keine Schrittliste, keine Überschriften, keine Listen.
+- Absätze auf einer Zeile übergeben, den Umbruch macht das Tool.
+- Ziel ist immer die Description, nie ein Kommentar. Nie per API, `curl` oder
+  Browser an `pr_summary` vorbei.
+- `pr_summary` ersetzt die ganze Description.
 - Kein offener PR: nicht anlegen, den Benutzer bitten, ihn im Bitbucket zu
   eröffnen.
-- Meldet `plan_pr` fehlenden Token oder fehlende URL: den genannten
+- Meldet `pr_summary` fehlenden Token oder fehlende URL: den genannten
   Installationsbefehl weitergeben und aufhören.
 
 Feldbedeutungen, Schreibregeln pro Feld und ein Beispiel: Skill `planify`. Lade

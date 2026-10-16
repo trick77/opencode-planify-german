@@ -180,43 +180,6 @@ function escapeText(value: unknown): string {
     .replace(/^(`{3,}|~{3,})/, (fence) => fence.replace(/./g, "\\$&"))
 }
 
-// Code-Span mit mehr Backticks als im Inhalt, damit ein Backtick im Pfad oder
-// Kommando den Span nicht vorzeitig schliesst.
-function codeSpan(value: unknown): string {
-  const text = singleLine(value)
-  const fence = "`".repeat(longestBacktickRun(text) + 1)
-  const pad = text.startsWith("`") || text.endsWith("`") ? " " : ""
-  return `${fence}${pad}${text}${pad}${fence}`
-}
-
-// Bitbucket dokumentiert nur ```-Blöcke. Enthält ein Kommando selbst ```, wird
-// eingerückt (vier Leerzeichen), das ist die zweite dokumentierte Form. Die Zeile
-// "Kommandos:" davor beendet die Dateiliste; direkt nach einem Listenpunkt wäre
-// der eingerückte Block sonst ein Absatz in diesem Punkt. Leerzeilen im Block
-// tragen den Einzug, damit collapseBlankLines sie nicht zusammenzieht.
-function codeBlock(lines: string[]): string {
-  const text = lines.join("\n")
-  if (!text.includes("```")) return "```sh\n" + text + "\n```"
-  return "Kommandos:\n\n" + text.split("\n").map((line) => `    ${line}`).join("\n")
-}
-
-function longestBacktickRun(text: string): number {
-  return Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
-}
-
-// Mehrfache Leerzeilen aus dem Template zusammenziehen, aber nicht in Codeblöcken:
-// dort gehören Leerzeilen zum Kommando.
-function collapseBlankLines(markdown: string): string {
-  const out: string[] = []
-  let inFence = false
-  for (const line of markdown.split("\n")) {
-    if (line.startsWith("```")) inFence = !inFence
-    else if (!inFence && line === "" && out.length && out[out.length - 1] === "") continue
-    out.push(line)
-  }
-  return out.join("\n").trim() + "\n"
-}
-
 // Zeilenbreite wie in noergler (backend/internal/render/wrap.go): Bitbucket zeigt
 // einen Absatz sonst über die ganze Fensterbreite. Ein einzelner Zeilenumbruch im
 // Absatz ist in Bitbucket Data Center ein sichtbarer Umbruch.
@@ -281,38 +244,27 @@ export function wrapProse(markdown: string, width = WRAP_WIDTH, listWidth = LIST
   return out.join("\n")
 }
 
-let markdownEnv: nunjucks.Environment | undefined
-
-// Eigene Umgebung statt nunjucks.configure: die setzt die globale Standard-Umgebung,
-// und Markdown braucht autoescape aus, HTML an. Einmal gebaut, Templates gecacht.
-function getMarkdownEnv(): nunjucks.Environment {
-  if (!markdownEnv) {
-    markdownEnv = new nunjucks.Environment(new nunjucks.FileSystemLoader(templateDir), {
-      autoescape: false,
-      trimBlocks: true,
-      lstripBlocks: true,
-    })
-    markdownEnv.addFilter("date", formatDate)
-    markdownEnv.addFilter("text", escapeText)
-    markdownEnv.addFilter("code", codeSpan)
-    markdownEnv.addFilter("codeblock", codeBlock)
-  }
-  return markdownEnv
-}
-
 export type MarkdownResult = { markdown: string; warnings: PlanWarning[] }
 
+export const MIN_PARAGRAPHS = 3
+export const MAX_PARAGRAPHS = 4
+
 /**
- * Rendert den Plan als Markdown für die Description eines Bitbucket-Data-Center-PRs.
- * Ein Diagramm fehlt dort: Bitbucket stellt kein SVG dar, die Description verweist
- * auf den HTML-Plan.
+ * Rendert die Zusammenfassung für die Description eines Bitbucket-Data-Center-PRs:
+ * 3-4 Absätze Prosa, je einer escapt auf einer Zeile, danach umbrochen. Keine
+ * Überschriften, Listen oder Codeblöcke.
  */
-export function renderMarkdown(plan: any): MarkdownResult {
-  assertValid(plan)
-  const warnings = checkSpelling(plan)
-  if (plan.diagram) {
-    warnings.push({ path: "/diagram", message: "Diagramm nicht in der PR-Description, Bitbucket stellt kein SVG dar" })
+export function renderSummary(summary: string): MarkdownResult {
+  const paragraphs = String(summary ?? "")
+    .split(/\n\s*\n/)
+    .map(singleLine)
+    .filter(Boolean)
+  if (paragraphs.length < MIN_PARAGRAPHS || paragraphs.length > MAX_PARAGRAPHS) {
+    throw new Error(
+      `Zusammenfassung hat ${paragraphs.length} Absätze, erlaubt ${MIN_PARAGRAPHS}-${MAX_PARAGRAPHS}, getrennt durch eine Leerzeile`,
+    )
   }
-  const markdown = getMarkdownEnv().render("plan.md.njk", { plan, baseName: baseName(plan) })
-  return { markdown: wrapProse(collapseBlankLines(markdown)), warnings }
+  const warnings = checkSpelling({ summary: paragraphs })
+  const markdown = wrapProse(paragraphs.map(escapeText).join("\n\n")) + "\n"
+  return { markdown, warnings }
 }

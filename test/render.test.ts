@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { resolve } from "node:path"
-import { baseName, loadSvg, checkSpelling, render, renderMarkdown, validate, root, wrapProse, WRAP_WIDTH, LIST_WRAP_WIDTH } from "../src/render.ts"
+import { baseName, loadSvg, checkSpelling, render, renderSummary, validate, root, wrapProse, WRAP_WIDTH, LIST_WRAP_WIDTH } from "../src/render.ts"
 import { buildOpenCommand } from "../src/open.ts"
 
 const examplePath = resolve(root, "skills/planify/references/beispiel-plan.json")
@@ -184,7 +184,7 @@ test("Web-Font-Import aus einem diagram-design-Export wird entfernt", () => {
   assert.ok(warnings.some((w) => w.message.includes("Web-Font-Import")))
 })
 
-test("Plugin registriert die Tools plan_render und plan_pr", async () => {
+test("Plugin registriert die Tools plan_render und pr_summary", async () => {
   // Given
   const { PlanifyPlugin } = await import("../src/plugin.ts")
 
@@ -193,9 +193,9 @@ test("Plugin registriert die Tools plan_render und plan_pr", async () => {
 
   // Then
   assert.ok(hooks.tool)
-  assert.deepEqual(Object.keys(hooks.tool), ["plan_render", "plan_pr"])
+  assert.deepEqual(Object.keys(hooks.tool), ["plan_render", "pr_summary"])
   assert.match(hooks.tool.plan_render.description, /Plan/)
-  assert.match(hooks.tool.plan_pr.description, /Description/)
+  assert.match(hooks.tool.pr_summary.description, /Description/)
 })
 
 test("Schema und Templates liegen unter der Paketwurzel", () => {
@@ -240,75 +240,42 @@ test("openWith und PLANIFY_OPEN schlagen den Plattform-Standard", () => {
   )
 })
 
-test("Markdown für die PR-Description hat alle Abschnitte in fester Reihenfolge", () => {
+test("Zusammenfassung escapt nur dokumentierte Zeichen, ein Absatz wird eine Zeile vor dem Umbruch", () => {
+  // Given
+  const summary = [
+    "Feld snake_case\nund *Stern* umbenennen",
+    "# keine Überschrift, `my_var` bleibt Code, a < b & c",
+    "1) keine Liste, und ```js kein Codeblock",
+  ].join("\n\n")
+
   // When
-  const { markdown, warnings } = renderMarkdown(example())
+  const { markdown, warnings } = renderSummary(summary)
 
   // Then
   assert.equal(warnings.length, 0)
-  const headings = markdown.split("\n").filter((line) => line.startsWith("## "))
-  assert.deepEqual(headings, [
-    "## Kontext",
-    "## Schritte",
-    "## Verifikation",
-    "## Risiken",
-    "## Offene Entscheidungen",
-    "## Nicht enthalten",
-  ])
-  assert.match(markdown, /^# MapStruct-Mapper/)
-  assert.match(markdown, /- `build\.gradle\.kts` — MapStruct/)
-  assert.match(markdown, /`SEP-24758-mapstruct-gradle-migration\.plan\.json`/)
-  assert.ok(markdown.includes("Änderungen") && !markdown.includes("ß"))
-  assert.doesNotMatch(markdown, /undefined|\n{3,}/)
+  assert.equal(
+    markdown,
+    "Feld snake\\_case und \\*Stern\\* umbenennen\n\n" +
+      "\\# keine Überschrift, `my_var` bleibt Code, a < b & c\n\n" +
+      "1\\) keine Liste, und ```js kein Codeblock\n",
+  )
 })
 
-test("Markdown escapt nur dokumentierte Zeichen und hält Prosa auf einer Zeile", () => {
+test("Zusammenfassung braucht 3-4 Absätze und bricht bei 110 Zeichen um", () => {
   // Given
-  const plan = example()
-  plan.steps[0].title = "Feld snake_case\nund *Stern* umbenennen"
-  plan.steps[0].rationale = "# keine Überschrift, `my_var` bleibt Code, a < b & c"
-  plan.verification[0] = { how: "grep 'a|b' `x`", expected: "1. keine Liste" }
-  plan.steps[0].files[0].path = "src/`odd`.ts"
+  const paragraph = Array.from({ length: 40 }, (_, i) => `wort${i}`).join(" ")
+  const paragraphs = (n: number) => Array.from({ length: n }, () => paragraph).join("\n\n  \n")
 
   // When
-  const { markdown } = renderMarkdown(plan)
+  const { markdown } = renderSummary(paragraphs(4))
 
   // Then
-  assert.ok(markdown.includes("### 1. Feld snake\\_case und \\*Stern\\* umbenennen\n"))
-  assert.ok(markdown.includes("\\# keine Überschrift, `my_var` bleibt Code, a < b & c"))
-  assert.ok(markdown.includes("- `` grep 'a|b' `x` `` — 1\\. keine Liste"))
-  assert.ok(markdown.includes("- ``src/`odd`.ts`` —"))
-  assert.doesNotMatch(markdown, /&lt;|&amp;|\n\|/)
-})
-
-test("Prosa, die mit 1) oder einem Codezaun beginnt, wird keine Liste und kein Codeblock", () => {
-  // Given
-  const plan = example()
-  plan.intent = "1) Erst das Schema anpassen, danach die Mapper neu generieren lassen."
-  plan.steps[0].rationale = "```js wäre hier falsch"
-
-  // When
-  const { markdown } = renderMarkdown(plan)
-
-  // Then
-  assert.ok(markdown.includes("\n1\\) Erst das Schema anpassen, danach die Mapper neu generieren lassen.\n"))
-  assert.ok(markdown.includes("\n\\`\\`\\`js wäre hier falsch\n"))
-  assert.equal(markdown.split("\n").filter((line) => line.startsWith("```")).length, 2)
-})
-
-test("Kommandos mit Leerzeilen bleiben im Codeblock unverändert, ``` im Kommando wird eingerückt", () => {
-  // Given
-  const plan = example()
-  plan.steps[0].commands = ["cat <<EOF", "", "", "EOF"]
-  plan.steps[1].commands = ["echo '```' && rm *.tmp", "", "", "echo fertig"]
-
-  // When
-  const { markdown } = renderMarkdown(plan)
-
-  // Then
-  assert.ok(markdown.includes("```sh\ncat <<EOF\n\n\nEOF\n```"))
-  // "Kommandos:" beendet die Dateiliste, sonst wäre der Block Teil des letzten Punkts
-  assert.ok(markdown.includes("\n\nKommandos:\n\n    echo '```' && rm *.tmp\n    \n    \n    echo fertig\n"))
+  assert.throws(() => renderSummary(paragraphs(2)), /2 Absätze, erlaubt 3-4/)
+  assert.throws(() => renderSummary(paragraphs(5)), /5 Absätze, erlaubt 3-4/)
+  assert.doesNotThrow(() => renderSummary(paragraphs(3)))
+  assert.equal(markdown.trimEnd().split("\n\n").length, 4)
+  assert.ok(markdown.split("\n").every((line) => line.length <= WRAP_WIDTH))
+  assert.ok(markdown.split("\n").length > 8)
 })
 
 test("Prosa bricht bei 110 Zeichen um, Listenpunkte bei 90 mit hängendem Einzug", () => {
@@ -341,18 +308,4 @@ test("Umbruch trennt keinen Code-Span und beginnt keine Zeile mit einem Blockmar
   // Then
   assert.ok(lines.some((line) => line.includes("`ein langer code span`")))
   assert.ok(lines.every((line) => !/^(?:[-+*>#]|\d+[.)])(\s|$)/.test(line)))
-})
-
-test("Diagramm fehlt im Markdown, mit Warnung und Hinweis", () => {
-  // Given
-  const plan = example()
-  plan.diagram = { title: "Ablauf", svgPath: "gibt-es-nicht.svg" }
-
-  // When
-  const { markdown, warnings } = renderMarkdown(plan)
-
-  // Then
-  assert.match(markdown, /## Ablauf\n\nDas Diagramm steht nur im HTML-Plan/)
-  assert.doesNotMatch(markdown, /<svg/)
-  assert.ok(warnings.some((w) => w.path === "/diagram"))
 })
