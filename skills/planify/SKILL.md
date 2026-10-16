@@ -103,19 +103,32 @@ SVG, keine Mermaid-Blöcke im Plan.
 
 ## PR-Description
 
-`pr_summary` schreibt eine Zusammenfassung in die Description eines offenen
-Bitbucket-Data-Center-PRs. Ist die Umsetzung fertig und der Branch gepusht, bietet
-das Modell es einmal an; geschrieben wird erst nach Ja.
+`pr_summary` schreibt eine Zusammenfassung in die Description eines
+Bitbucket-Data-Center-PRs. Hat der Branch noch keinen offenen PR, legt es ihn als
+Draft an, mit der Zusammenfassung als Description. Ist die Umsetzung fertig und
+der Branch gepusht, bietet das Modell es einmal an; geschrieben wird erst nach Ja.
 
 | Argument | Pflicht | Inhalt |
 | --- | --- | --- |
 | `summary` | ja | 3-4 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung. |
 | `prUrl` | nein | PR-URL aus dem Browser. Nur bei mehreren offenen PRs oder einem PR ausserhalb des aktuellen Branches. |
+| `title` | zum Anlegen | Titel des neuen PRs. Bei bestehendem PR ignoriert. |
+| `targetBranch` | zum Anlegen | Ziel-Branch, vom Benutzer bestätigt. Nie raten. |
+
+Anlegen in zwei Schritten: erst ohne `title`/`targetBranch` aufrufen, das Tool
+liefert einen Ziel-Vorschlag (Basis des Branches, nie master/main) oder keinen.
+Benutzer fragen, ob der Vorschlag gilt bzw. welches Ziel, dann mit `title` und
+`targetBranch` erneut aufrufen. Default-Reviewer setzt das Tool selbst. Aus
+master/main oder einem ungepushten Branch legt es nichts an.
 
 Weniger als 3 oder mehr als 4 Absätze lehnt das Tool ab, ohne Bitbucket
-anzufassen. Escapt und bei 110 Zeichen umbrochen wird im Tool. Die Description
-wird vollständig ersetzt, Titel und Reviewer bleiben. `pr_summary` legt nie einen
-PR an und schreibt nie einen Kommentar.
+anzufassen. Escapt und bei 110 Zeichen umbrochen wird im Tool. Bei bestehendem PR
+wird die Description vollständig ersetzt, Titel und Reviewer bleiben. Nie ein
+Kommentar.
+
+Description veraltet — seit der letzten Zusammenfassung ist wesentliche Arbeit
+dazugekommen (neuer Teil der Lösung, geänderter Ansatz, nicht nur Fixes oder
+Review-Kleinkram): einmal anbieten, sie zu aktualisieren, erst nach Ja.
 
 ## Beispiel
 

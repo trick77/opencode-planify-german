@@ -1,6 +1,6 @@
 // Minimaler Client für die REST-API von Bitbucket Data Center: offenen PR eines
-// Branches finden und dessen Description ersetzen. Kein PR wird angelegt, kein
-// Kommentar geschrieben.
+// Branches finden, dessen Description ersetzen oder einen Draft-PR anlegen. Kein
+// Kommentar wird geschrieben.
 
 export type RepoRef = { projectKey: string; repoSlug: string }
 
@@ -13,7 +13,16 @@ export type PullRequest = {
   title: string
   targetBranch: string
   url: string
-  reviewers: { user: { name: string } }[]
+  reviewers: Reviewer[]
+  draft?: boolean
+}
+
+export type Reviewer = { user: { name: string } }
+
+export type Repository = RepoRef & {
+  id: number
+  /** Angemeldeter Benutzer aus dem Header X-AUSERNAME, falls Bitbucket ihn setzt. */
+  currentUser?: string
 }
 
 export type BitbucketConfig = {
@@ -32,11 +41,23 @@ export class BitbucketError extends Error {
   // Kein Parameter-Property: Node führt das Paket per Type-Stripping aus, und das
   // kennt diese Syntax nicht.
   readonly status?: number
+  /** Anfrage abgeschickt, Antwort kam nicht rechtzeitig: sie kann durchgegangen sein. */
+  readonly timedOut: boolean
 
-  constructor(message: string, status?: number) {
+  constructor(message: string, status?: number, timedOut = false) {
     super(message)
     this.status = status
+    this.timedOut = timedOut
   }
+}
+
+/** Ein schreibender Aufruf ist vielleicht durchgegangen; "nicht geändert" wäre falsch. */
+export class UncertainOutcomeError extends BitbucketError {}
+
+// 2xx ohne brauchbare Antwort oder Timeout nach dem Absenden: der Schreibvorgang kann
+// durch sein.
+function isUncertain(error: unknown): error is BitbucketError {
+  return error instanceof BitbucketError && (error.timedOut || (error.status !== undefined && error.status < 300))
 }
 
 /**
@@ -105,6 +126,15 @@ function repoPath(repo: RepoRef): string {
 }
 
 async function request(config: BitbucketConfig, method: string, path: string, body?: unknown): Promise<any> {
+  return (await requestWithHeaders(config, method, path, body)).data
+}
+
+async function requestWithHeaders(
+  config: BitbucketConfig,
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ data: any; headers: Headers }> {
   // baseUrl ist normalisiert (normalizeBaseUrl), der Pfad beginnt mit "/".
   const url = config.baseUrl + path
   const doFetch = config.fetch ?? fetch
@@ -126,7 +156,11 @@ async function request(config: BitbucketConfig, method: string, path: string, bo
     text = await response.text()
   } catch (error) {
     if (signal.aborted) {
-      throw new BitbucketError(`Bitbucket antwortet nicht innerhalb von ${timeoutMs / 1000} s (${config.baseUrl}).`)
+      throw new BitbucketError(
+        `Bitbucket antwortet nicht innerhalb von ${timeoutMs / 1000} s (${config.baseUrl}).`,
+        undefined,
+        true,
+      )
     }
     throw new BitbucketError(`Bitbucket nicht erreichbar (${config.baseUrl}): ${(error as Error).message}`)
   }
@@ -148,7 +182,7 @@ async function request(config: BitbucketConfig, method: string, path: string, bo
       response.status,
     )
   }
-  return data
+  return { data, headers: response.headers }
 }
 
 function toPullRequest(data: any): PullRequest {
@@ -166,6 +200,80 @@ function toPullRequest(data: any): PullRequest {
     reviewers: (data.reviewers ?? [])
       .filter((r: any) => typeof r.user?.name === "string")
       .map((r: any) => ({ user: { name: r.user.name } })),
+    draft: typeof data.draft === "boolean" ? data.draft : undefined,
+  }
+}
+
+/** Repository-ID (braucht die Default-Reviewer-API) und, falls gesetzt, der angemeldete Benutzer. */
+export async function getRepository(config: BitbucketConfig, repo: RepoRef): Promise<Repository> {
+  const { data, headers } = await requestWithHeaders(config, "GET", repoPath(repo))
+  if (typeof data.id !== "number") throw new BitbucketError("Antwort von Bitbucket ist kein Repository (id fehlt).")
+  return { ...repo, id: data.id, currentUser: headers.get("X-AUSERNAME") ?? undefined }
+}
+
+/**
+ * Default-Reviewer für Quelle und Ziel. Anders als die Oberfläche setzt die REST-API
+ * sie beim Anlegen nicht selbst.
+ */
+export async function getDefaultReviewers(
+  config: BitbucketConfig,
+  repo: Repository,
+  fromBranch: string,
+  toBranch: string,
+): Promise<Reviewer[]> {
+  const query = new URLSearchParams({
+    sourceRepoId: String(repo.id),
+    targetRepoId: String(repo.id),
+    sourceRefId: `refs/heads/${fromBranch}`,
+    targetRefId: `refs/heads/${toBranch}`,
+  })
+  const path =
+    `/rest/default-reviewers/1.0/projects/${encodeURIComponent(repo.projectKey)}` +
+    `/repos/${encodeURIComponent(repo.repoSlug)}/reviewers?${query}`
+  const data = await request(config, "GET", path)
+  if (!Array.isArray(data)) throw new BitbucketError("Antwort von Bitbucket enthält keine Reviewer-Liste.")
+  return data.filter((u: any) => typeof u?.name === "string").map((u: any) => ({ user: { name: u.name } }))
+}
+
+export type NewPullRequest = {
+  title: string
+  description: string
+  fromBranch: string
+  toBranch: string
+  reviewers: Reviewer[]
+}
+
+/**
+ * Legt einen Draft-PR an (Drafts ab Bitbucket DC 8.18). Ältere Instanzen ignorieren
+ * `draft` still; ob es ein Draft wurde, steht in `draft` der Rückgabe.
+ */
+export async function createPullRequest(config: BitbucketConfig, repo: RepoRef, pr: NewPullRequest): Promise<PullRequest> {
+  const repository = { slug: repo.repoSlug, project: { key: repo.projectKey } }
+  let data: any
+  try {
+    data = await request(config, "POST", `${repoPath(repo)}/pull-requests`, {
+      title: pr.title,
+      description: pr.description,
+      draft: true,
+      fromRef: { id: `refs/heads/${pr.fromBranch}`, repository },
+      toRef: { id: `refs/heads/${pr.toBranch}`, repository },
+      reviewers: pr.reviewers,
+    })
+  } catch (error) {
+    if (isUncertain(error)) throw uncertain(error.message)
+    if (error instanceof BitbucketError && (error.status === 401 || error.status === 403)) {
+      throw new BitbucketError(`${error.message} Zum Anlegen braucht der Token Schreibrecht auf das Repository.`, error.status)
+    }
+    throw error
+  }
+  try {
+    return toPullRequest(data)
+  } catch (error) {
+    throw uncertain((error as Error).message)
+  }
+
+  function uncertain(message: string) {
+    return new UncertainOutcomeError(`${message} Ob der PR angelegt wurde, im Bitbucket prüfen, bevor erneut angelegt wird.`)
   }
 }
 
@@ -198,7 +306,7 @@ export async function setDescription(
     throw new BitbucketError(`PR #${id} ist ${pr.state}, nicht offen. Description nicht geändert.`)
   }
   const uncertain = (message: string) =>
-    new BitbucketError(`${message} Ob die Description geschrieben wurde, im PR #${id} prüfen.`)
+    new UncertainOutcomeError(`${message} Ob die Description geschrieben wurde, im PR #${id} prüfen.`)
   let data: any
   try {
     data = await request(config, "PUT", `${repoPath(repo)}/pull-requests/${id}`, {
@@ -206,6 +314,8 @@ export async function setDescription(
       title: pr.title,
       description,
       reviewers: pr.reviewers,
+      // Ohne das Feld könnte ein Draft beim Update veröffentlicht werden.
+      ...(pr.draft === undefined ? {} : { draft: pr.draft }),
     })
   } catch (error) {
     if (error instanceof BitbucketError && error.status === 409) {
@@ -214,8 +324,7 @@ export async function setDescription(
         409,
       )
     }
-    // 2xx mit unbrauchbarer Antwort: das PUT kann durch sein.
-    if (error instanceof BitbucketError && error.status !== undefined && error.status < 300) throw uncertain(error.message)
+    if (isUncertain(error)) throw uncertain(error.message)
     throw error
   }
   try {
