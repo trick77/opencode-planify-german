@@ -1,14 +1,9 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { resolve } from "node:path"
 import { getPullRequest, parsePullRequestUrl, parseRemote, setDescription } from "../src/bitbucket.ts"
-import { createPlanPrTool, MAX_DESCRIPTION_LENGTH } from "../src/tool-pr.ts"
-import { root } from "../src/render.ts"
+import { createPrSummaryTool, MAX_DESCRIPTION_LENGTH } from "../src/tool-pr.ts"
 
 const BASE = "https://bitbucket.example.com"
-const examplePath = resolve(root, "skills/planify/references/beispiel-plan.json")
 
 type Call = { method: string; url: string; body?: any; auth?: string }
 
@@ -66,25 +61,22 @@ function pullRequest(id: number, branch: string, overrides: Record<string, unkno
   }
 }
 
-function planFile(change?: (plan: any) => void): string {
-  const plan = JSON.parse(readFileSync(examplePath, "utf8"))
-  change?.(plan)
-  const dir = mkdtempSync(resolve(tmpdir(), "planify-pr-"))
-  const path = resolve(dir, "plan.plan.json")
-  writeFileSync(path, JSON.stringify(plan), "utf8")
-  return path
-}
+const SUMMARY = [
+  "Aufgabe: die Mapper von Hand auf MapStruct umstellen.",
+  "Problem: die handgeschriebenen Mapper laufen bei jedem neuen Feld auseinander.",
+  "Lösung: MapStruct generiert die Mapper beim Build, ein Test prüft fehlende Felder.",
+].join("\n\n")
 
 function runTool(
-  args: { path: string; prUrl?: string },
-  options: Parameters<typeof createPlanPrTool>[0],
+  args: { summary: string; prUrl?: string },
+  options: Parameters<typeof createPrSummaryTool>[0],
   git: Record<string, string> = {
     "rev-parse": "feature/SEP-1-x",
     "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-x",
     remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
   },
 ) {
-  const tool = createPlanPrTool({
+  const tool = createPrSummaryTool({
     bitbucketUrl: BASE,
     bitbucketToken: "geheim",
     env: {},
@@ -129,7 +121,7 @@ test("Description wird ersetzt, Titel und Reviewer gehen unverändert mit", asyn
   const bitbucket = fakeBitbucket(prs)
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch })
+  const result = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch })
 
   // Then
   assert.match(result, /Description von PR #7 ersetzt/)
@@ -138,7 +130,7 @@ test("Description wird ersetzt, Titel und Reviewer gehen unverändert mit", asyn
   assert.equal(put.body.version, 3)
   assert.equal(put.body.title, "PR 7")
   assert.deepEqual(put.body.reviewers, [{ user: { name: "reviewer" } }])
-  assert.match(put.body.description, /^# MapStruct-Mapper/)
+  assert.equal(put.body.description, SUMMARY + "\n")
   assert.equal(put.auth, "Bearer geheim")
   assert.equal(prs[0].title, "PR 7")
   assert.ok(!bitbucket.calls.some((c) => c.method === "POST"), "kein PR angelegt, kein Kommentar")
@@ -181,7 +173,7 @@ test("PR-Suche nimmt das Push-Ziel, wenn der lokale Branch anders heisst", async
   const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-lang")])
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch }, {
+  const result = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch }, {
     "rev-parse": "kurz",
     "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-lang",
     remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
@@ -200,7 +192,7 @@ test("Upstream master führt nie zum PR von master", async () => {
   const bitbucket = fakeBitbucket(prs)
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch }, {
+  const result = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch }, {
     "rev-parse": "feature/neu",
     "for-each-ref": "origin\0refs/remotes/origin/feature/neu",
     remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
@@ -217,7 +209,7 @@ test("2xx ohne JSON wird als Anmeldeproblem gemeldet, nicht als fehlender PR", a
   const loginPage = (async () => new Response("<html>Login</html>", { status: 200 })) as typeof fetch
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: loginPage })
+  const result = await runTool({ summary: SUMMARY }, { fetch: loginPage })
 
   // Then
   assert.match(result, /ohne JSON \(Login-Seite eines Proxys\?/)
@@ -232,7 +224,7 @@ test("unbrauchbare Antwort auf das PUT sagt, dass der PR zu prüfen ist", async 
     init.method === "PUT" ? new Response(null, { status: 204 }) : real.fetch(input, init)) as typeof fetch
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: emptyPut })
+  const result = await runTool({ summary: SUMMARY }, { fetch: emptyPut })
 
   // Then
   assert.match(result, /im PR #7 prüfen/)
@@ -244,7 +236,7 @@ test("Reviewer ohne Namen gehen nicht ins PUT", async () => {
   const bitbucket = fakeBitbucket(prs)
 
   // When
-  await runTool({ path: planFile() }, { fetch: bitbucket.fetch })
+  await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch })
 
   // Then
   const put = bitbucket.calls.find((c) => c.method === "PUT")!
@@ -256,7 +248,7 @@ test("Branch ohne offenen PR ändert nichts und nennt den nächsten Schritt", as
   const bitbucket = fakeBitbucket([pullRequest(7, "anderer-branch")])
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch })
+  const result = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch })
 
   // Then
   assert.match(result, /kein offener PR für Branch feature\/SEP-1-x in proj\/app/)
@@ -272,7 +264,7 @@ test("mehrere offene PRs werden aufgelistet statt geraten", async () => {
   ])
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch })
+  const result = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch })
 
   // Then
   assert.match(result, /2 offene PRs/)
@@ -288,7 +280,7 @@ test("PR-URL wählt den PR direkt, ohne Branch-Suche", async () => {
 
   // When
   const result = await runTool(
-    { path: planFile(), prUrl: `${BASE}/projects/PROJ/repos/app/pull-requests/8` },
+    { summary: SUMMARY, prUrl: `${BASE}/projects/PROJ/repos/app/pull-requests/8` },
     { fetch: bitbucket.fetch },
     {},
   )
@@ -304,7 +296,7 @@ test("Token geht nie an einen Host ausserhalb der konfigurierten Instanz", async
 
   // When
   const result = await runTool(
-    { path: planFile(), prUrl: "https://attacker.example/projects/X/repos/y/pull-requests/1" },
+    { summary: SUMMARY, prUrl: "https://attacker.example/projects/X/repos/y/pull-requests/1" },
     { fetch: bitbucket.fetch },
   )
 
@@ -318,7 +310,7 @@ test("gemergter PR wird nicht angefasst", async () => {
   const bitbucket = fakeBitbucket([pullRequest(9, "x", { state: "MERGED" })])
 
   // When
-  const result = await runTool({ path: planFile(), prUrl: `${BASE}/projects/PROJ/repos/app/pull-requests/9` }, { fetch: bitbucket.fetch })
+  const result = await runTool({ summary: SUMMARY, prUrl: `${BASE}/projects/PROJ/repos/app/pull-requests/9` }, { fetch: bitbucket.fetch })
 
   // Then
   assert.match(result, /PR #9 ist MERGED/)
@@ -330,8 +322,8 @@ test("ohne Token oder URL kein Aufruf, dafür der Installationsbefehl", async ()
   const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-x")])
 
   // When
-  const withoutToken = await runTool({ path: planFile() }, { fetch: bitbucket.fetch, bitbucketToken: undefined })
-  const withoutUrl = await runTool({ path: planFile() }, { fetch: bitbucket.fetch, bitbucketUrl: undefined })
+  const withoutToken = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch, bitbucketToken: undefined })
+  const withoutUrl = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch, bitbucketUrl: undefined })
 
   // Then
   assert.match(withoutToken, /kein Bitbucket-Token/)
@@ -346,7 +338,7 @@ test("Umgebungsvariablen ersetzen fehlende Plugin-Optionen", async () => {
 
   // When
   const result = await runTool(
-    { path: planFile() },
+    { summary: SUMMARY },
     {
       fetch: bitbucket.fetch,
       bitbucketUrl: undefined,
@@ -365,38 +357,41 @@ test("detached HEAD ändert nichts", async () => {
   const bitbucket = fakeBitbucket([])
 
   // When
-  const result = await runTool({ path: planFile() }, { fetch: bitbucket.fetch }, { "rev-parse": "HEAD", remote: "git@h:p/r.git" })
+  const result = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch }, { "rev-parse": "HEAD", remote: "git@h:p/r.git" })
 
   // Then
   assert.match(result, /detached HEAD/)
   assert.equal(bitbucket.calls.length, 0)
 })
 
-test("ungültiger oder zu langer Plan erreicht Bitbucket nicht", async () => {
+test("falsche Absatzzahl oder zu lange Zusammenfassung erreicht Bitbucket nicht", async () => {
   // Given
   const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-x")])
-  const invalid = planFile((plan) => delete plan.verification)
-  const tooLong = planFile((plan) => (plan.intent = "x".repeat(MAX_DESCRIPTION_LENGTH)))
+  const tooFew = "Erster Absatz.\n\nZweiter Absatz."
+  const tooMany = "A.\n\nB.\n\nC.\n\nD.\n\nE."
+  const tooLong = SUMMARY + " " + "x".repeat(MAX_DESCRIPTION_LENGTH)
 
   // When
-  const invalidResult = await runTool({ path: invalid }, { fetch: bitbucket.fetch })
-  const tooLongResult = await runTool({ path: tooLong }, { fetch: bitbucket.fetch })
+  const results = await Promise.all(
+    [tooFew, tooMany, tooLong].map((summary) => runTool({ summary }, { fetch: bitbucket.fetch })),
+  )
 
   // Then
-  assert.match(invalidResult, /nicht schemakonform/)
-  assert.match(tooLongResult, /Grenze/)
+  assert.match(results[0], /2 Absätze, erlaubt 3-4/)
+  assert.match(results[1], /5 Absätze, erlaubt 3-4/)
+  assert.match(results[2], /Grenze/)
   assert.equal(bitbucket.calls.length, 0)
 })
 
 test("Warnungen nennen Pfad und Meldung", async () => {
   // Given
   const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-x")])
-  const withDiagram = planFile((plan) => (plan.diagram = { title: "Ablauf", svgPath: "fehlt.svg" }))
 
   // When
-  const result = await runTool({ path: withDiagram }, { fetch: bitbucket.fetch })
+  const result = await runTool({ summary: SUMMARY.replace("Problem:", "Das grosse Problem ist gross, ß:") }, { fetch: bitbucket.fetch })
 
   // Then
-  assert.match(result, /\/diagram: Diagramm nicht in der PR-Description/)
+  assert.match(result, /Description von PR #7 ersetzt/)
+  assert.match(result, /\/summary\/1: Eszett gefunden/)
   assert.doesNotMatch(result, /undefined/)
 })

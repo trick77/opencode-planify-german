@@ -24,7 +24,7 @@ export type BitbucketConfig = {
   timeoutMs?: number
 }
 
-// Ohne Grenze hängt plan_pr und damit die opencode-Sitzung, wenn Bitbucket die
+// Ohne Grenze hängt pr_summary und damit die opencode-Sitzung, wenn Bitbucket die
 // Verbindung annimmt und nie antwortet (VPN weg, Proxy schluckt).
 export const REQUEST_TIMEOUT_MS = 30_000
 

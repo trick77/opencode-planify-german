@@ -1,6 +1,4 @@
 import { execFile } from "node:child_process"
-import { readFileSync } from "node:fs"
-import { isAbsolute, resolve } from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import {
   BitbucketError,
@@ -13,7 +11,7 @@ import {
   type PullRequest,
   type RepoRef,
 } from "./bitbucket.ts"
-import { renderMarkdown } from "./render.ts"
+import { renderSummary } from "./render.ts"
 
 const z = tool.schema
 
@@ -68,17 +66,22 @@ function describePullRequest(pr: PullRequest): string {
 }
 
 /**
- * Baut das Tool `plan_pr`: schreibt einen gerenderten Plan als Markdown in die
- * Description eines offenen Bitbucket-Data-Center-PRs. Nur auf Anfrage des Benutzers.
+ * Baut das Tool `pr_summary`: schreibt eine Zusammenfassung (Aufgabe, Problem,
+ * Lösung) in die Description eines offenen Bitbucket-Data-Center-PRs. Nur auf
+ * Anfrage des Benutzers.
  */
-export function createPlanPrTool(options: PrToolOptions = {}) {
+export function createPrSummaryTool(options: PrToolOptions = {}) {
   return tool({
     description:
-      "Schreibt einen bestehenden Plan (.plan.json von plan_render) als Markdown in die Description eines " +
-      "offenen Bitbucket-Data-Center-Pull-Requests und ersetzt sie vollständig. Nie als Kommentar, legt nie einen PR an. " +
+      "Schreibt eine Zusammenfassung in die Description eines offenen Bitbucket-Data-Center-Pull-Requests und " +
+      "ersetzt sie vollständig: 3-4 Absätze Prosa, getrennt durch eine Leerzeile — Aufgabe, Problem oder " +
+      "Herausforderung, Lösung. Keine Überschriften, keine Listen; den Umbruch macht das Tool. " +
+      "Nie als Kommentar, legt nie einen PR an. " +
       "Nur aufrufen, wenn der Benutzer es verlangt. Ohne prUrl wird der offene PR des aktuellen Branches gesucht.",
     args: {
-      path: z.string().describe("Pfad zur .plan.json, wie plan_render ihn gemeldet hat"),
+      summary: z
+        .string()
+        .describe("3-4 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung"),
       prUrl: z
         .string()
         .optional()
@@ -99,24 +102,16 @@ export function createPlanPrTool(options: PrToolOptions = {}) {
         ].join("\n")
       }
 
-      const planPath = isAbsolute(args.path) ? args.path : resolve(context.directory, args.path)
-      let plan: any
-      try {
-        plan = JSON.parse(readFileSync(planPath, "utf8"))
-      } catch (error) {
-        return `PR nicht geändert — Plan nicht lesbar: ${planPath}: ${(error as Error).message}`
-      }
-
       let rendered
       try {
-        rendered = renderMarkdown(plan)
+        rendered = renderSummary(args.summary)
       } catch (error) {
-        return `PR nicht geändert — ${(error as Error).message}\nPlan korrigieren, mit plan_render neu schreiben, dann erneut plan_pr.`
+        return `PR nicht geändert — ${(error as Error).message}`
       }
       if (rendered.markdown.length > MAX_DESCRIPTION_LENGTH) {
         return (
           `PR nicht geändert — Description wäre ${rendered.markdown.length} Zeichen lang, ` +
-          `Grenze ${MAX_DESCRIPTION_LENGTH}. Plan kürzen.`
+          `Grenze ${MAX_DESCRIPTION_LENGTH}. Zusammenfassung kürzen.`
         )
       }
 
@@ -173,13 +168,13 @@ export function createPlanPrTool(options: PrToolOptions = {}) {
           if (open.length === 0) {
             return [
               `PR nicht geändert — kein offener PR für Branch ${branch} in ${repo.projectKey}/${repo.repoSlug}.`,
-              "Branch gepusht? PR im Bitbucket eröffnen, dann erneut plan_pr. Oder PR-URL angeben.",
+              "Branch gepusht? PR im Bitbucket eröffnen, dann erneut pr_summary. Oder PR-URL angeben.",
             ].join("\n")
           }
           if (open.length > 1) {
             return [
               `PR nicht geändert — Branch ${branch} hat ${open.length} offene PRs. Benutzer fragen, welcher gemeint ist,`,
-              "dann plan_pr mit prUrl erneut aufrufen:",
+              "dann pr_summary mit prUrl erneut aufrufen:",
               ...open.map(describePullRequest),
             ].join("\n")
           }
@@ -187,11 +182,10 @@ export function createPlanPrTool(options: PrToolOptions = {}) {
         }
 
         const updated = await setDescription(config, repo, id, rendered.markdown)
-        context.metadata({ title: `PR #${updated.id} — ${updated.title}`, metadata: { url: updated.url, planPath } })
+        context.metadata({ title: `PR #${updated.id} — ${updated.title}`, metadata: { url: updated.url } })
         const lines = [
           `Description von PR #${updated.id} ersetzt (${repo.projectKey}/${repo.repoSlug} → ${updated.targetBranch}):`,
           `  ${updated.url}`,
-          `Quelle: ${planPath}`,
         ]
         if (rendered.warnings.length) {
           lines.push("", "Warnungen:")
