@@ -86,12 +86,18 @@ dass opencode danach neu starten muss.
 ## Zusammenfassung in die PR-Description (Bitbucket Data Center)
 
 Ist die Umsetzung fertig und der Branch gepusht, von dir aus anbieten: "Soll ich
-eine Zusammenfassung in die PR-Description schreiben?" Einmal pro Branch, nicht
-nach jedem Commit. Erst nach Ja das Tool `pr_summary` aufrufen; verlangt der
-Benutzer es selbst ("Zusammenfassung in den PR"), ohne Rückfrage. Es sucht den
-offenen PR des aktuellen Branches selbst; eine PR-URL nur übergeben, wenn der
-Benutzer eine nennt oder `pr_summary` mehrere PRs auflistet — dann den Benutzer
-fragen, welcher gemeint ist.
+eine Zusammenfassung in die PR-Description schreiben?" — oder, wenn noch kein PR
+offen ist: "Soll ich den PR als Draft mit Zusammenfassung eröffnen?" Einmal pro
+Branch, nicht nach jedem Commit. Erst nach Ja das Tool `pr_summary` aufrufen;
+verlangt der Benutzer es selbst ("Zusammenfassung in den PR", "PR eröffnen"),
+ohne Rückfrage. Es sucht den offenen PR des aktuellen Branches selbst; eine
+PR-URL nur übergeben, wenn der Benutzer eine nennt oder `pr_summary` mehrere PRs
+auflistet — dann den Benutzer fragen, welcher gemeint ist.
+
+Description veraltet: ist seit der letzten Zusammenfassung wesentliche Arbeit
+dazugekommen (neuer Teil der Lösung, geänderter Ansatz — nicht Fixes oder
+Review-Kleinkram), von dir aus einmal anbieten: "Die PR-Description ist veraltet,
+soll ich sie aktualisieren?" Erst nach Ja.
 
 - Inhalt: 3-4 Absätze Prosa, getrennt durch eine Leerzeile. Aufgabe, Problem
   oder Herausforderung, Lösung — die umgesetzte, nicht die geplante. Nicht der
@@ -100,8 +106,12 @@ fragen, welcher gemeint ist.
 - Ziel ist immer die Description, nie ein Kommentar. Nie per API, `curl` oder
   Browser an `pr_summary` vorbei.
 - `pr_summary` ersetzt die ganze Description.
-- Kein offener PR: nicht anlegen, den Benutzer bitten, ihn im Bitbucket zu
-  eröffnen.
+- Kein offener PR: `pr_summary` legt ihn als Draft an, nie per API, `curl` oder
+  Browser daran vorbei. Erst ohne `targetBranch` aufrufen; das Tool nennt einen
+  Ziel-Vorschlag oder keinen. Den Benutzer fragen, ob der Vorschlag verwendet
+  werden soll — ohne Vorschlag nach dem Ziel-Branch fragen, nie raten. Titel
+  vorschlagen, dann mit `title` und `targetBranch` erneut aufrufen.
+- Nie einen PR aus master/main eröffnen.
 - Meldet `pr_summary` fehlenden Token oder fehlende URL: den genannten
   Installationsbefehl weitergeben und aufhören.
 

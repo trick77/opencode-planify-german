@@ -10,18 +10,44 @@ type Call = { method: string; url: string; body?: any; auth?: string }
 // Bitbucket-Attrappe: hält offene PRs im Speicher und protokolliert jeden Aufruf.
 function fakeBitbucket(
   prs: any[],
-  options: { conflictsOnce?: boolean } = {},
+  options: {
+    conflictsOnce?: boolean
+    defaultReviewers?: string[]
+    defaultReviewersStatus?: number
+    username?: string
+    drafts?: boolean
+    createStatus?: number
+  } = {},
 ): { fetch: typeof fetch; calls: Call[] } {
   const calls: Call[] = []
   let conflicts = options.conflictsOnce ? 1 : 0
-  const json = (status: number, data: unknown) =>
-    new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } })
+  const json = (status: number, data: unknown, headers: Record<string, string> = {}) =>
+    new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...headers } })
   const fetchImpl = (async (input: string, init: RequestInit = {}) => {
     const url = new URL(input)
     const method = init.method ?? "GET"
     const body = init.body ? JSON.parse(String(init.body)) : undefined
     calls.push({ method, url: input, body, auth: (init.headers as Record<string, string>).Authorization })
     const single = url.pathname.match(/\/pull-requests\/(\d+)$/)
+    if (method === "GET" && /\/rest\/api\/latest\/projects\/[^/]+\/repos\/[^/]+$/.test(url.pathname)) {
+      return json(200, { id: 42, slug: "app" }, options.username ? { "X-AUSERNAME": options.username } : {})
+    }
+    if (method === "GET" && url.pathname.startsWith("/rest/default-reviewers/")) {
+      if (options.defaultReviewersStatus) return json(options.defaultReviewersStatus, { errors: [{ message: "nope" }] })
+      return json(200, (options.defaultReviewers ?? []).map((name) => ({ name })))
+    }
+    if (method === "POST" && url.pathname.endsWith("/pull-requests")) {
+      if (options.createStatus) return json(options.createStatus, { errors: [{ message: "verboten" }] })
+      const created = pullRequest(100, body.fromRef.id.replace("refs/heads/", ""), {
+        title: body.title,
+        description: body.description,
+        toRef: { displayId: body.toRef.id.replace("refs/heads/", "") },
+        reviewers: body.reviewers,
+        ...(options.drafts === false ? {} : { draft: body.draft }),
+      })
+      prs.push(created)
+      return json(201, created)
+    }
     if (method === "GET" && url.pathname.endsWith("/pull-requests")) {
       const branch = url.searchParams.get("at")
       return json(200, { values: prs.filter((pr) => pr.fromRef.id === branch && pr.state === "OPEN") })
@@ -67,10 +93,20 @@ const SUMMARY = [
   "Lösung: MapStruct generiert die Mapper beim Build, ein Test prüft fehlende Felder.",
 ].join("\n\n")
 
+function fakeGit(answers: Record<string, string | null>) {
+  return async (gitArgs: string[]) => {
+    const key = [gitArgs.join(" "), `${gitArgs[0]} ${gitArgs[1]}`, gitArgs[0]].find((k) => k in answers)
+    const answer = key === undefined ? undefined : answers[key]
+    if (answer == null) throw new Error(`git ${gitArgs.join(" ")} fehlgeschlagen`)
+    return answer
+  }
+}
+
 function runTool(
-  args: { summary: string; prUrl?: string },
+  args: { summary: string; prUrl?: string; title?: string; targetBranch?: string },
   options: Parameters<typeof createPrSummaryTool>[0],
-  git: Record<string, string> = {
+  // Ganzer Aufruf vor "befehl option" vor "befehl"; null lässt den Aufruf scheitern.
+  git: Record<string, string | null> = {
     "rev-parse": "feature/SEP-1-x",
     "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-x",
     remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
@@ -80,11 +116,7 @@ function runTool(
     bitbucketUrl: BASE,
     bitbucketToken: "geheim",
     env: {},
-    git: async (gitArgs) => {
-      const answer = git[gitArgs[0]]
-      if (answer === undefined) throw new Error(`git ${gitArgs.join(" ")} fehlgeschlagen`)
-      return answer
-    },
+    git: fakeGit(git),
     ...options,
   })
   const context = { directory: "/projekt", metadata: () => {} } as never
@@ -252,8 +284,267 @@ test("Branch ohne offenen PR ändert nichts und nennt den nächsten Schritt", as
 
   // Then
   assert.match(result, /kein offener PR für Branch feature\/SEP-1-x in proj\/app/)
-  assert.match(result, /Branch gepusht\?/)
+  assert.match(result, /mit title und targetBranch/)
+  assert.match(result, /Ziel-Branch beim Benutzer erfragen, nie raten/)
+  assert.ok(!bitbucket.calls.some((c) => c.method === "PUT" || c.method === "POST"))
+})
+
+// Zustand nach "checkout -b feature/SEP-1-x origin/release-2.3" und "push -u": Push-Ziel
+// und Upstream zeigen auf den Branch selbst, die Basis steht nur noch im Reflog.
+const FEATURE_GIT: Record<string, string | null> = {
+  "rev-parse --abbrev-ref": "feature/SEP-1-x",
+  "rev-parse --verify": "abc123",
+  "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-x\0origin\0refs/remotes/origin/feature/SEP-1-x",
+  reflog: "commit: zwei\ncommit: eins\nbranch: Created from origin/release-2.3",
+  remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
+  "rev-list": "0",
+}
+
+// Nach "push" ohne -u bei push.default=simple: %(push) leer, Upstream noch die Basis.
+const PUSHED_WITHOUT_U = {
+  ...FEATURE_GIT,
+  "for-each-ref": "origin\0\0origin\0refs/remotes/origin/release-2.3",
+  reflog: null,
+}
+
+test("ohne PR legt das Tool einen Draft mit Description und Default-Reviewern an, ohne den Autor", async () => {
+  // Given
+  const prs: any[] = []
+  const bitbucket = fakeBitbucket(prs, { defaultReviewers: ["jan", "anna", "beat"], username: "jan" })
+
+  // When
+  const result = await runTool({ summary: SUMMARY, title: "SEP-1 Mapper", targetBranch: "release-2.3" }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+
+  // Then
+  assert.match(result, /Draft-PR #100 angelegt \(proj\/app, feature\/SEP-1-x → release-2\.3\)/)
+  assert.match(result, /Reviewer: anna, beat/)
+  assert.doesNotMatch(result, /Warnungen/)
+  const post = bitbucket.calls.find((c) => c.method === "POST")!
+  assert.equal(post.url, `${BASE}/rest/api/latest/projects/proj/repos/app/pull-requests`)
+  assert.equal(post.body.draft, true)
+  assert.equal(post.body.title, "SEP-1 Mapper")
+  assert.equal(post.body.description, SUMMARY + "\n")
+  assert.equal(post.body.fromRef.id, "refs/heads/feature/SEP-1-x")
+  assert.equal(post.body.toRef.id, "refs/heads/release-2.3")
+  assert.deepEqual(post.body.toRef.repository, { slug: "app", project: { key: "proj" } })
+  assert.deepEqual(post.body.reviewers, [{ user: { name: "anna" } }, { user: { name: "beat" } }])
+  const reviewerQuery = new URL(bitbucket.calls.find((c) => c.url.includes("default-reviewers"))!.url).searchParams
+  assert.equal(reviewerQuery.get("sourceRepoId"), "42")
+  assert.equal(reviewerQuery.get("targetRefId"), "refs/heads/release-2.3")
+})
+
+test("ohne title und targetBranch nur ein Vorschlag: die Basis des Branches, nie master/main", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([])
+
+  // When
+  const fromRelease = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+  const fromMaster = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch }, {
+    ...FEATURE_GIT,
+    reflog: "branch: Created from origin/master",
+  })
+  const withoutU = await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch }, PUSHED_WITHOUT_U)
+  const onlyTitle = await runTool({ summary: SUMMARY, title: "T" }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+
+  // Then
+  assert.match(fromRelease, /Vorschlag Ziel: release-2\.3/)
+  assert.match(fromRelease, /Benutzer fragen, ob der verwendet werden soll/)
+  assert.match(withoutU, /Vorschlag Ziel: release-2\.3/)
+  assert.doesNotMatch(fromMaster, /Vorschlag/)
+  assert.match(fromMaster, /Ziel-Branch beim Benutzer erfragen, nie raten/)
+  assert.match(onlyTitle, /Vorschlag Ziel: release-2\.3/)
+  assert.ok(!bitbucket.calls.some((c) => c.method === "POST"))
+})
+
+test("aus master/main, ohne Push oder mit Ziel gleich Quelle wird nichts angelegt", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([])
+  const args = { summary: SUMMARY, title: "T", targetBranch: "develop" }
+
+  // When
+  const onMaster = await runTool(args, { fetch: bitbucket.fetch }, {
+    ...FEATURE_GIT,
+    "rev-parse --abbrev-ref": "master",
+    "for-each-ref": "origin\0refs/remotes/origin/master",
+  })
+  const notPushed = await runTool(args, { fetch: bitbucket.fetch }, {
+    ...FEATURE_GIT,
+    "rev-parse --verify --quiet refs/remotes/origin/feature/SEP-1-x": null,
+  })
+  const sameBranch = await runTool({ ...args, targetBranch: "feature/SEP-1-x" }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+
+  // Then
+  assert.match(onMaster, /Quelle ist master\. Ein PR aus master\/main ergibt keinen Sinn/)
+  assert.match(notPushed, /nicht gepusht/)
+  assert.match(sameBranch, /zugleich die Quelle/)
+  assert.ok(!bitbucket.calls.some((c) => c.method === "POST"))
+})
+
+test("Default-Reviewer nicht ladbar: PR ohne Reviewer, mit Warnung", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([], { defaultReviewersStatus: 404 })
+
+  // When
+  const result = await runTool({ summary: SUMMARY, title: "T", targetBranch: "develop" }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+
+  // Then
+  assert.match(result, /Draft-PR #100 angelegt/)
+  assert.match(result, /Reviewer: keine/)
+  assert.match(result, /Default-Reviewer nicht geladen/)
+  assert.deepEqual(bitbucket.calls.find((c) => c.method === "POST")!.body.reviewers, [])
+})
+
+test("Instanz ohne Drafts und ungepushte Commits ergeben Warnungen", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([], { drafts: false })
+
+  // When
+  const result = await runTool(
+    { summary: SUMMARY, title: "T", targetBranch: "develop" },
+    { fetch: bitbucket.fetch },
+    { ...FEATURE_GIT, "rev-list": "2" },
+  )
+
+  // Then
+  assert.match(result, /^PR #100 angelegt/)
+  assert.match(result, /nicht als Draft/)
+  assert.match(result, /2 lokale Commits nicht gepusht/)
+})
+
+test("bestehender PR aufs bestätigte Ziel: nichts angelegt, die Description wird ersetzt", async () => {
+  // Given
+  const prs = [pullRequest(7, "feature/SEP-1-x")]
+  const bitbucket = fakeBitbucket(prs)
+
+  // When
+  const result = await runTool({ summary: SUMMARY, title: "T", targetBranch: "origin/master" }, { fetch: bitbucket.fetch }, {
+    ...FEATURE_GIT,
+    "rev-parse --verify --quiet refs/remotes/origin/origin/master": null,
+  })
+  const withUrl = await runTool(
+    { summary: SUMMARY, title: "T", prUrl: `${BASE}/projects/PROJ/repos/app/pull-requests/7` },
+    { fetch: bitbucket.fetch },
+  )
+
+  // Then
+  assert.match(result, /Description von PR #7 ersetzt/)
+  assert.match(result, /title nicht verwendet/)
+  assert.match(withUrl, /prUrl meint einen bestehenden PR/)
+  assert.ok(!bitbucket.calls.some((c) => c.method === "POST"))
+})
+
+test("bestehender PR auf ein anderes Ziel bleibt unberührt, der neue PR wird angelegt", async () => {
+  // Given
+  const prs = [pullRequest(7, "feature/SEP-1-x")]
+  const bitbucket = fakeBitbucket(prs)
+
+  // When
+  const result = await runTool({ summary: SUMMARY, title: "T", targetBranch: "release-2.3" }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+
+  // Then
+  assert.match(result, /Draft-PR #100 angelegt/)
   assert.ok(!bitbucket.calls.some((c) => c.method === "PUT"))
+  assert.equal(prs[0].description, "alt")
+})
+
+test("unbekannter Ziel-Branch wird vor jedem Bitbucket-Aufruf abgelehnt", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([])
+
+  // When
+  const result = await runTool(
+    { summary: SUMMARY, title: "T", targetBranch: "relase-2.3" },
+    { fetch: bitbucket.fetch },
+    { ...FEATURE_GIT, "rev-parse --verify": null },
+  )
+
+  // Then
+  assert.match(result, /Ziel-Branch relase-2\.3 gibt es auf origin nicht/)
+  assert.equal(bitbucket.calls.length, 0)
+})
+
+test("Draft bleibt beim Ersetzen der Description ein Draft", async () => {
+  // Given
+  const prs = [pullRequest(7, "feature/SEP-1-x", { draft: true })]
+  const bitbucket = fakeBitbucket(prs)
+
+  // When
+  await runTool({ summary: SUMMARY }, { fetch: bitbucket.fetch })
+
+  // Then
+  assert.equal(bitbucket.calls.find((c) => c.method === "PUT")!.body.draft, true)
+})
+
+test("Timeout beim Anlegen meldet einen unklaren Ausgang, nicht 'nicht geändert'", async () => {
+  // Given
+  const real = fakeBitbucket([])
+  const slowPost = (async (input: string, init: RequestInit = {}) => {
+    if (init.method !== "POST") return real.fetch(input, init)
+    await new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason)))
+  }) as typeof fetch
+  const keepAlive = setInterval(() => {}, 1000)
+
+  // When
+  const result = await runTool(
+    { summary: SUMMARY, title: "T", targetBranch: "develop" },
+    { fetch: slowPost, timeoutMs: 50 },
+    FEATURE_GIT,
+  )
+  clearInterval(keepAlive)
+
+  // Then
+  assert.match(result, /^Ausgang unklar — Bitbucket antwortet nicht/)
+  assert.match(result, /bevor erneut angelegt wird/)
+})
+
+test("Autor wird ohne Rücksicht auf Gross-/Kleinschreibung aus den Reviewern gefiltert", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([], { defaultReviewers: ["jdoe", "anna"], username: "JDoe" })
+
+  // When
+  await runTool({ summary: SUMMARY, title: "T", targetBranch: "develop" }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+
+  // Then
+  assert.deepEqual(bitbucket.calls.find((c) => c.method === "POST")!.body.reviewers, [{ user: { name: "anna" } }])
+})
+
+test("'Created from HEAD' nimmt die Basis aus dem Reflog von HEAD", async () => {
+  // Given: git checkout release-2.3 && git checkout -b feature/SEP-1-x
+  const bitbucket = fakeBitbucket([])
+  const reflogs: Record<string, string> = {
+    "refs/heads/feature/SEP-1-x": "commit: eins\nbranch: Created from HEAD",
+    HEAD: [
+      "checkout: moving from master to feature/SEP-1-x",
+      "commit: eins",
+      "checkout: moving from release-2.3 to feature/SEP-1-x",
+      "checkout: moving from master to release-2.3",
+    ].join("\n"),
+  }
+  const tool = createPrSummaryTool({
+    bitbucketUrl: BASE,
+    bitbucketToken: "t",
+    env: {},
+    fetch: bitbucket.fetch,
+    git: async (gitArgs) => (gitArgs[0] === "reflog" ? reflogs[gitArgs[3]] : fakeGit(FEATURE_GIT)(gitArgs)),
+  })
+
+  // When
+  const result = (await tool.execute({ summary: SUMMARY } as never, { directory: "/p", metadata: () => {} } as never)) as string
+
+  // Then
+  assert.match(result, /Vorschlag Ziel: release-2\.3/)
+})
+
+test("Anlegen ohne Schreibrecht nennt das Recht", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([], { createStatus: 403 })
+
+  // When
+  const result = await runTool({ summary: SUMMARY, title: "T", targetBranch: "develop" }, { fetch: bitbucket.fetch }, FEATURE_GIT)
+
+  // Then
+  assert.match(result, /PR nicht geändert — Bitbucket antwortet 403/)
+  assert.match(result, /Schreibrecht auf das Repository/)
 })
 
 test("mehrere offene PRs werden aufgelistet statt geraten", async () => {
