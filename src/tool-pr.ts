@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import type { Info, Result } from "@opencode/plugin/promise/tool"
+import type { Info, Result, ToolContext } from "@opencode/plugin/promise/tool"
 import {
   BitbucketError,
   createPullRequest,
@@ -17,6 +17,7 @@ import {
   type Reviewer,
 } from "./bitbucket.ts"
 import { renderSummary } from "./render.ts"
+import type { DirectoryResolver } from "./tool.ts"
 
 // Grenze für die Description. Wert unverifiziert: auf der eigenen Instanz messen und
 // hier nachziehen. Darüber lehnt das Tool ab, statt Bitbucket kürzen zu lassen.
@@ -27,8 +28,8 @@ const INSTALL_HINT =
   "--set bitbucketUrl=https://<bitbucket-host> --set-env bitbucketToken=<ENV_VAR_MIT_TOKEN>"
 
 export type PrToolOptions = {
-  /** Projektverzeichnis; dort laufen die git-Abfragen. */
-  directory: string
+  /** Verzeichnis der Sitzung pro Aufruf; dort laufen die git-Abfragen. */
+  directory: DirectoryResolver
   bitbucketUrl?: string
   bitbucketToken?: string
   env?: Record<string, string | undefined>
@@ -42,9 +43,9 @@ export type PrToolOptions = {
 type Git = (args: string[], cwd: string) => Promise<string>
 
 // Asynchron: ein synchroner Aufruf blockiert den ganzen opencode-Prozess.
-function runGit(args: string[], cwd: string): Promise<string> {
+function runGit(args: string[], cwd: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolvePromise, reject) => {
-    execFile("git", args, { cwd, encoding: "utf8" }, (error, stdout, stderr) => {
+    execFile("git", args, { cwd, encoding: "utf8", signal }, (error, stdout, stderr) => {
       if (error) reject(new Error(stderr.trim() || error.message))
       else resolvePromise(stdout.trim())
     })
@@ -182,8 +183,8 @@ export function createPrSummaryTool(options: PrToolOptions): Info {
       },
       required: ["summary"],
     },
-    async execute(input) {
-      const text = await summarize(options, input as SummaryInput)
+    async execute(input, context) {
+      const text = await summarize(options, input as SummaryInput, context)
       return typeof text === "string" ? { content: text } : text
     },
   }
@@ -192,9 +193,10 @@ export function createPrSummaryTool(options: PrToolOptions): Info {
 type SummaryInput = { summary: string; prUrl?: string; title?: string; targetBranch?: string }
 
 // Fehlertexte gehen als String zurück, ein Erfolg samt Metadaten als Result.
-async function summarize(options: PrToolOptions, args: SummaryInput): Promise<string | Result> {
+async function summarize(options: PrToolOptions, args: SummaryInput, context: ToolContext): Promise<string | Result> {
   const env = options.env ?? process.env
-  const git = options.git ?? runGit
+  const signal = context.signal
+  const git: Git = options.git ?? ((gitArgs, cwd) => runGit(gitArgs, cwd, signal))
   const token = options.bitbucketToken?.trim() || env.PLANIFY_BITBUCKET_TOKEN?.trim()
   const configuredUrl = options.bitbucketUrl?.trim() || env.PLANIFY_BITBUCKET_URL?.trim()
   const title = args.title?.trim()
@@ -236,7 +238,7 @@ async function summarize(options: PrToolOptions, args: SummaryInput): Promise<st
     return `PR nicht geändert — Bitbucket-URL ungültig: ${configuredUrl}`
   }
 
-  const config: BitbucketConfig = { baseUrl, token, fetch: options.fetch, timeoutMs: options.timeoutMs }
+  const config: BitbucketConfig = { baseUrl, token, fetch: options.fetch, timeoutMs: options.timeoutMs, signal }
   let repo: RepoRef
   let id: number
   try {
@@ -256,20 +258,21 @@ async function summarize(options: PrToolOptions, args: SummaryInput): Promise<st
       repo = ref
       id = ref.id
     } else {
+      const directory = await options.directory(context)
       let target: BranchTarget | undefined
       let remote: string
       try {
-        target = await branchTarget(git, options.directory)
+        target = await branchTarget(git, directory)
         if (!target) {
           return "PR nicht geändert — kein Branch ausgecheckt (detached HEAD). Branch auschecken oder PR-URL angeben."
         }
-        remote = await git(["remote", "get-url", target.remoteName], options.directory)
+        remote = await git(["remote", "get-url", target.remoteName], directory)
       } catch (error) {
         return `PR nicht geändert — git-Abfrage fehlgeschlagen: ${(error as Error).message}`
       }
       repo = parseRemote(remote)
       if (targetBranch) {
-        const resolved = await resolveTarget(git, options.directory, target.remoteName, targetBranch)
+        const resolved = await resolveTarget(git, directory, target.remoteName, targetBranch)
         if (!resolved) {
           return `PR nicht geändert — Ziel-Branch ${targetBranch} gibt es auf ${target.remoteName} nicht (git fetch?).`
         }
@@ -290,7 +293,7 @@ async function summarize(options: PrToolOptions, args: SummaryInput): Promise<st
           repo,
           target,
           git,
-          cwd: options.directory,
+          cwd: directory,
           title,
           targetBranch,
           rendered,

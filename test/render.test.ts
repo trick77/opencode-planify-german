@@ -209,7 +209,7 @@ test("plan_render schreibt JSON und HTML ins Projektverzeichnis", async () => {
   // Given
   const { createPlanRenderTool } = await import("../src/tool.ts")
   const directory = mkdtempSync(resolve(tmpdir(), "planify-tool-"))
-  const tool = createPlanRenderTool({ directory })
+  const tool = createPlanRenderTool({ directory: () => directory })
 
   // When
   const result = await tool.execute({ plan: example(), open: false }, {} as never)
@@ -226,7 +226,7 @@ test("plan_render meldet Schemaverletzungen, ohne zu schreiben", async () => {
   // Given
   const { createPlanRenderTool } = await import("../src/tool.ts")
   const directory = mkdtempSync(resolve(tmpdir(), "planify-tool-"))
-  const tool = createPlanRenderTool({ directory })
+  const tool = createPlanRenderTool({ directory: () => directory })
 
   // When
   const result = await tool.execute({ plan: { ...example(), verification: [] }, open: false }, {} as never)
@@ -234,6 +234,92 @@ test("plan_render meldet Schemaverletzungen, ohne zu schreiben", async () => {
   // Then
   assert.match(result.content as string, /^Plan nicht geschrieben — Schema verletzt:/)
   assert.ok(!existsSync(resolve(directory, "docs/plans")))
+})
+
+test("Plugin schreibt in das Verzeichnis der aufrufenden Sitzung, nicht ins Ladeverzeichnis", async () => {
+  // Given: Plugin in /geladen, die Sitzung läuft in einem anderen Checkout
+  const { default: plugin } = await import("../src/index.ts")
+  const sessionDir = mkdtempSync(resolve(tmpdir(), "planify-session-"))
+  const added: { name: string; execute: (input: unknown, context: unknown) => Promise<{ metadata?: any }> }[] = []
+  const asked: string[] = []
+  const ctx = {
+    location: { directory: "/geladen" },
+    options: {},
+    session: {
+      get: async ({ sessionID }: { sessionID: string }) => {
+        asked.push(sessionID)
+        return { location: { directory: sessionDir } }
+      },
+    },
+    tool: { transform: async (callback: (editor: unknown) => void) => callback({ add: (t: never) => added.push(t) }) },
+  }
+  await plugin.setup(ctx as never)
+  const render = added.find((t) => t.name === "plan_render")!
+
+  // When
+  const result = await render.execute({ plan: example(), open: false }, { sessionID: "ses_a" })
+
+  // Then
+  assert.deepEqual(asked, ["ses_a"])
+  assert.ok(result.metadata?.htmlPath.startsWith(sessionDir))
+})
+
+test("Plugin fällt auf das Ladeverzeichnis zurück, wenn die Sitzung nicht lesbar ist", async () => {
+  // Given
+  const { default: plugin } = await import("../src/index.ts")
+  const loadDir = mkdtempSync(resolve(tmpdir(), "planify-load-"))
+  const added: { name: string; execute: (input: unknown, context: unknown) => Promise<{ metadata?: any }> }[] = []
+  const ctx = {
+    location: { directory: loadDir },
+    options: {},
+    session: { get: async () => Promise.reject(new Error("unbekannte Sitzung")) },
+    tool: { transform: async (callback: (editor: unknown) => void) => callback({ add: (t: never) => added.push(t) }) },
+  }
+  await plugin.setup(ctx as never)
+
+  // When
+  const result = await added[0].execute({ plan: example(), open: false }, { sessionID: "ses_x" })
+
+  // Then
+  assert.ok(result.metadata?.htmlPath.startsWith(loadDir))
+})
+
+test("Eingabeschema von plan_render stammt aus plan.schema.json und erzwingt nichts", async () => {
+  // Given
+  const { createPlanRenderTool } = await import("../src/tool.ts")
+  const schema = JSON.parse(readFileSync(resolve(root, "skills/planify/schema/plan.schema.json"), "utf8"))
+  const input = createPlanRenderTool({ directory: () => "/p" }).input as any
+
+  // When
+  const keywords = new Set<string>()
+  const walk = (node: any) => {
+    for (const [key, value] of Object.entries(node)) {
+      keywords.add(key)
+      if (key === "properties") Object.values(value as object).forEach(walk)
+      else if (key === "items") walk(value)
+    }
+  }
+  walk(input)
+
+  // Then
+  assert.deepEqual(Object.keys(input.properties.plan.properties), Object.keys(schema.properties))
+  assert.equal(input.properties.plan.properties.ticket.description, schema.properties.ticket.description)
+  for (const strict of ["required", "pattern", "minItems", "minLength", "maxLength", "format", "additionalProperties"]) {
+    assert.ok(!keywords.has(strict), `${strict} im Eingabeschema`)
+  }
+})
+
+test("plan_render ohne Plan meldet einen deutschen Feldfehler statt zu werfen", async () => {
+  // Given
+  const { createPlanRenderTool } = await import("../src/tool.ts")
+  const tool = createPlanRenderTool({ directory: () => "/p" })
+
+  // When
+  const result = await tool.execute({ plan: {} }, {} as never)
+
+  // Then
+  assert.match(result.content as string, /^Plan nicht geschrieben — Schema verletzt:/)
+  assert.match(result.content as string, /ticket/)
 })
 
 test("Schema und Templates liegen unter der Paketwurzel", () => {

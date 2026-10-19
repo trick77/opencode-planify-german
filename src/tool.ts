@@ -1,97 +1,50 @@
 import { spawn } from "node:child_process"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
-import type { Info } from "@opencode/plugin/promise/tool"
+import type { Info, ToolContext } from "@opencode/plugin/promise/tool"
 import { buildOpenCommand } from "./open.ts"
-import { baseName, render, validate } from "./render.ts"
+import { baseName, render, schemaPath, validate } from "./render.ts"
 
-// Die verbindliche Prüfung macht ajv gegen skills/planify/schema/plan.schema.json.
-// Dieses JSON Schema beschreibt dem Modell nur die Struktur. Bewusst locker: opencode
-// prüft die Eingabe vor execute, ein strenges Schema nähme ajv die Feldfehler weg.
-const str = (description?: string) => (description ? { type: "string", description } : { type: "string" })
+// Das Eingabeschema für opencode kommt aus skills/planify/schema/plan.schema.json, der
+// einzigen Quelle. Davon bleiben nur Struktur und Beschreibungen (type, properties,
+// items, description) für das Modell; required, pattern, minItems und Co. fallen weg.
+// opencode prüft die Eingabe vor execute und lehnt sonst mit englischer Sammelmeldung
+// ab, bevor ajv die deutschen Feldfehler liefern kann.
+type JsonSchema = { [key: string]: unknown }
 
-const obj = (properties: Record<string, object>, required: string[], description?: string) => ({
-  type: "object",
-  properties,
-  required,
-  ...(description ? { description } : {}),
-})
+export function loosenSchema(schema: JsonSchema): JsonSchema {
+  const loose: JsonSchema = {}
+  if (schema.type !== undefined) loose.type = schema.type
+  if (typeof schema.description === "string") loose.description = schema.description
+  if (schema.properties && typeof schema.properties === "object") {
+    loose.properties = Object.fromEntries(
+      Object.entries(schema.properties as Record<string, JsonSchema>).map(([name, child]) => [name, loosenSchema(child)]),
+    )
+  }
+  if (schema.items && typeof schema.items === "object") loose.items = loosenSchema(schema.items as JsonSchema)
+  return loose
+}
 
-const arr = (items: object, description?: string) => ({ type: "array", items, ...(description ? { description } : {}) })
+const planShape = {
+  ...loosenSchema(JSON.parse(readFileSync(schemaPath, "utf8"))),
+  description: "Vollständiger Plan. Feldnamen englisch, Inhalte deutsch",
+}
 
-const fileEntry = obj(
-  {
-    path: str("Pfad relativ zum Projekt, z. B. src/render.ts"),
-    change: str("Was in dieser Datei passiert, ein Satz"),
-  },
-  ["path", "change"],
-)
-
-const planShape = obj(
-  {
-    ticket: str("Ticket-Key aus dem Branch, Muster [A-Z][A-Z0-9]+-[0-9]+"),
-    slug: str("Kurztitel in Kebab-Case, ASCII ohne Umlaute (nur für den Dateinamen)"),
-    title: str("Titel des Vorhabens, deutsch"),
-    intent: str("Ein Absatz: was gemacht wird und warum"),
-    context: obj(
-      { problem: str(), outcome: str() },
-      ["problem", "outcome"],
-      "problem: was heute schiefgeht. outcome: Zustand nach der Umsetzung",
-    ),
-    steps: arr(
-      obj(
-        {
-          title: str(),
-          rationale: str("Warum der Schritt nötig ist. Nur wenn nicht offensichtlich"),
-          files: arr(fileEntry, "Mindestens eine Datei mit exaktem Pfad"),
-          commands: arr(str()),
-        },
-        ["title", "files"],
-      ),
-      "Umsetzungsschritte in Reihenfolge",
-    ),
-    verification: arr(
-      obj({ how: str(), expected: str() }, ["how", "expected"]),
-      "Ende-zu-Ende-Prüfung: how (Kommando oder Handgriff), expected (woran man Erfolg erkennt)",
-    ),
-    risks: arr(obj({ risk: str(), mitigation: str() }, ["risk", "mitigation"])),
-    openDecisions: arr(
-      obj({ question: str(), recommendation: str(), tradeoff: str() }, ["question", "recommendation", "tradeoff"]),
-      "Offene Entscheidungen des Benutzers, mit Empfehlung und Abwägung. Nie still im Text entscheiden",
-    ),
-    outOfScope: arr(str()),
-    diagram: obj(
-      { title: str(), caption: str(), svgPath: str() },
-      ["title", "svgPath"],
-      "Nur wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt. SVG per Skill diagram-design erzeugen, Pfad hier eintragen, wird inline eingebettet",
-    ),
-    meta: obj(
-      {
-        createdAt: str("ISO-8601 Zeitstempel"),
-        model: str(),
-        branch: str(),
-        repo: str(),
-      },
-      ["createdAt"],
-      "Metadaten des Plans",
-    ),
-  },
-  ["ticket", "slug", "title", "intent", "steps", "verification", "meta"],
-  "Vollständiger Plan. Feldnamen englisch, Inhalte deutsch",
-)
+/** Liefert pro Tool-Aufruf das Verzeichnis der Sitzung; relative Pfade gelten ab dort. */
+export type DirectoryResolver = (context: ToolContext) => string | Promise<string>
 
 type RenderInput = { plan: unknown; outDir?: string; open?: boolean }
 
 export type RenderToolOptions = {
   /** Öffnen-Kommando überschreiben, z. B. "firefox". Standard: Handler des Systems. */
   openWith?: string
-  /** Projektverzeichnis; relative Pfade (outDir, svgPath) gelten ab hier. */
-  directory: string
+  /** Verzeichnis der Sitzung pro Aufruf; relative Pfade (outDir, svgPath) gelten ab dort. */
+  directory: DirectoryResolver
 }
 
 /**
  * Baut das Tool `plan_render`. Als Fabrik, damit das Plugin seine Optionen
- * (etwa ein abweichendes Öffnen-Kommando) und das Projektverzeichnis hineingeben kann.
+ * (etwa ein abweichendes Öffnen-Kommando) und die Auflösung des Sitzungsverzeichnisses hineingeben kann.
  */
 export function createPlanRenderTool(options: RenderToolOptions): Info {
   return {
@@ -101,16 +54,18 @@ export function createPlanRenderTool(options: RenderToolOptions): Info {
       "Einziger Weg, einen Plan auszugeben: nie HTML oder Markdown selbst schreiben. " +
       "Nicht schemakonform → nichts geschrieben, Feldfehler kommen zurück, korrigieren und erneut aufrufen. " +
       "Felder und Schreibregeln: Skill \"planify\".",
-    input: obj(
-      {
+    // Ohne required: auch ein fehlender Plan geht an ajv und kommt als deutscher Feldfehler zurück.
+    input: {
+      type: "object",
+      properties: {
         plan: planShape,
-        outDir: str("Zielverzeichnis, Standard docs/plans im Projekt"),
+        outDir: { type: "string", description: "Zielverzeichnis, Standard docs/plans im Projekt" },
         open: { type: "boolean", description: "HTML im Standard-Browser öffnen, Standard true" },
       },
-      ["plan"],
-    ),
-    async execute(input) {
+    },
+    async execute(input, context) {
       const args = input as RenderInput
+      const directory = await options.directory(context)
       const plan = args.plan as any
       const errors = validate(plan)
       if (errors.length) {
@@ -124,7 +79,7 @@ export function createPlanRenderTool(options: RenderToolOptions): Info {
         }
       }
 
-      const targetDir = resolve(options.directory, args.outDir ?? "docs/plans")
+      const targetDir = resolve(directory, args.outDir ?? "docs/plans")
       mkdirSync(targetDir, { recursive: true })
       const name = baseName(plan)
       const jsonPath = resolve(targetDir, `${name}.plan.json`)
@@ -132,7 +87,7 @@ export function createPlanRenderTool(options: RenderToolOptions): Info {
 
       let result
       try {
-        result = render(plan, { baseDir: options.directory })
+        result = render(plan, { baseDir: directory })
       } catch (renderError) {
         return { content: `Plan nicht geschrieben — Rendern fehlgeschlagen: ${(renderError as Error).message}` }
       }
