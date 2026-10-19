@@ -1,4 +1,6 @@
-import { Plugin } from "@opencode/plugin"
+// Nur Typen aus @opencode/plugin: das Paket ist Dev-Dependency, zur Laufzeit zieht
+// das Plugin nichts davon nach (Plugin.define gibt die Definition ohnehin unverändert zurück).
+import type { Plugin } from "@opencode/plugin"
 import { createPlanRenderTool } from "./tool.ts"
 import { createPrSummaryTool } from "./tool-pr.ts"
 
@@ -15,7 +17,7 @@ const stringOption = (value: unknown) => (typeof value === "string" ? value : un
  * Relative Pfade und git-Abfragen gelten ab dem Verzeichnis, in dem opencode das
  * Plugin lädt (`ctx.location.directory`); der Tool-Aufruf selbst kennt keins.
  */
-export default Plugin.define({
+const plugin: Plugin.Plugin = {
   id: "opencode-planify-german",
   async setup(ctx) {
     const { directory } = ctx.location
@@ -31,4 +33,6 @@ export default Plugin.define({
       editor.add(prSummary)
     })
   },
-})
+}
+
+export default plugin
