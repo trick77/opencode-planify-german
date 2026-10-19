@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { tool } from "@opencode-ai/plugin"
+import type { Info, Result } from "@opencode/plugin/promise/tool"
 import {
   BitbucketError,
   createPullRequest,
@@ -18,8 +18,6 @@ import {
 } from "./bitbucket.ts"
 import { renderSummary } from "./render.ts"
 
-const z = tool.schema
-
 // Grenze für die Description. Wert unverifiziert: auf der eigenen Instanz messen und
 // hier nachziehen. Darüber lehnt das Tool ab, statt Bitbucket kürzen zu lassen.
 export const MAX_DESCRIPTION_LENGTH = 32_000
@@ -29,6 +27,8 @@ const INSTALL_HINT =
   "--set bitbucketUrl=https://<bitbucket-host> --set-env bitbucketToken=<ENV_VAR_MIT_TOKEN>"
 
 export type PrToolOptions = {
+  /** Projektverzeichnis; dort laufen die git-Abfragen. */
+  directory: string
   bitbucketUrl?: string
   bitbucketToken?: string
   env?: Record<string, string | undefined>
@@ -152,8 +152,9 @@ function describePullRequest(pr: PullRequest): string {
  * Lösung) in die Description eines offenen Bitbucket-Data-Center-PRs. Nur auf
  * Anfrage des Benutzers.
  */
-export function createPrSummaryTool(options: PrToolOptions = {}) {
-  return tool({
+export function createPrSummaryTool(options: PrToolOptions): Info {
+  return {
+    name: "pr_summary",
     description:
       "Schreibt eine Zusammenfassung in die Description eines offenen Bitbucket-Data-Center-Pull-Requests und " +
       "ersetzt sie vollständig: 3-4 Absätze Prosa, getrennt durch eine Leerzeile — Aufgabe, Problem oder " +
@@ -162,151 +163,162 @@ export function createPrSummaryTool(options: PrToolOptions = {}) {
       "dieser Description und den Default-Reviewern an; ohne die beiden liefert es einen Ziel-Vorschlag, den der " +
       "Benutzer bestätigen muss. Nur aufrufen, wenn der Benutzer es verlangt. Ohne prUrl wird der offene PR des " +
       "aktuellen Branches gesucht.",
-    args: {
-      summary: z
-        .string()
-        .describe("3-4 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung"),
-      prUrl: z
-        .string()
-        .optional()
-        .describe("PR-URL aus dem Browser. Nur nötig, wenn der Branch mehrere offene PRs hat oder ein anderer PR gemeint ist"),
-      title: z.string().optional().describe("Titel des neuen PRs. Nur zum Anlegen, wenn der Branch keinen offenen PR hat"),
-      targetBranch: z
-        .string()
-        .optional()
-        .describe("Ziel-Branch des neuen PRs, vom Benutzer bestätigt. Nur zum Anlegen, nie raten"),
+    input: {
+      type: "object",
+      properties: {
+        summary: {
+          type: "string",
+          description: "3-4 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung",
+        },
+        prUrl: {
+          type: "string",
+          description: "PR-URL aus dem Browser. Nur nötig, wenn der Branch mehrere offene PRs hat oder ein anderer PR gemeint ist",
+        },
+        title: { type: "string", description: "Titel des neuen PRs. Nur zum Anlegen, wenn der Branch keinen offenen PR hat" },
+        targetBranch: {
+          type: "string",
+          description: "Ziel-Branch des neuen PRs, vom Benutzer bestätigt. Nur zum Anlegen, nie raten",
+        },
+      },
+      required: ["summary"],
     },
-    async execute(args, context) {
-      const env = options.env ?? process.env
-      const git = options.git ?? runGit
-      const token = options.bitbucketToken?.trim() || env.PLANIFY_BITBUCKET_TOKEN?.trim()
-      const configuredUrl = options.bitbucketUrl?.trim() || env.PLANIFY_BITBUCKET_URL?.trim()
-      const title = args.title?.trim()
-      let targetBranch = args.targetBranch?.trim().replace(/^refs\/heads\//, "")
+    async execute(input) {
+      const text = await summarize(options, input as SummaryInput)
+      return typeof text === "string" ? { content: text } : text
+    },
+  }
+}
 
-      if (!token) {
+type SummaryInput = { summary: string; prUrl?: string; title?: string; targetBranch?: string }
+
+// Fehlertexte gehen als String zurück, ein Erfolg samt Metadaten als Result.
+async function summarize(options: PrToolOptions, args: SummaryInput): Promise<string | Result> {
+  const env = options.env ?? process.env
+  const git = options.git ?? runGit
+  const token = options.bitbucketToken?.trim() || env.PLANIFY_BITBUCKET_TOKEN?.trim()
+  const configuredUrl = options.bitbucketUrl?.trim() || env.PLANIFY_BITBUCKET_URL?.trim()
+  const title = args.title?.trim()
+  let targetBranch = args.targetBranch?.trim().replace(/^refs\/heads\//, "")
+
+  if (!token) {
+    return [
+      "PR nicht geändert — kein Bitbucket-Token konfiguriert.",
+      "planify mit Token neu installieren und opencode neu starten:",
+      `  ${INSTALL_HINT}`,
+      "Alternativ Umgebungsvariable PLANIFY_BITBUCKET_TOKEN setzen.",
+    ].join("\n")
+  }
+
+  let rendered
+  try {
+    rendered = renderSummary(args.summary)
+  } catch (error) {
+    return `PR nicht geändert — ${(error as Error).message}`
+  }
+  if (rendered.markdown.length > MAX_DESCRIPTION_LENGTH) {
+    return (
+      `PR nicht geändert — Description wäre ${rendered.markdown.length} Zeichen lang, ` +
+      `Grenze ${MAX_DESCRIPTION_LENGTH}. Zusammenfassung kürzen.`
+    )
+  }
+
+  if (!configuredUrl) {
+    return [
+      "PR nicht geändert — keine Bitbucket-URL konfiguriert.",
+      `planify mit URL neu installieren: ${INSTALL_HINT}`,
+      "Alternativ Umgebungsvariable PLANIFY_BITBUCKET_URL setzen.",
+    ].join("\n")
+  }
+  let baseUrl: string
+  try {
+    baseUrl = normalizeBaseUrl(configuredUrl)
+  } catch {
+    return `PR nicht geändert — Bitbucket-URL ungültig: ${configuredUrl}`
+  }
+
+  const config: BitbucketConfig = { baseUrl, token, fetch: options.fetch, timeoutMs: options.timeoutMs }
+  let repo: RepoRef
+  let id: number
+  try {
+    if (args.prUrl) {
+      if (title || targetBranch) {
+        return "PR nicht geändert — prUrl meint einen bestehenden PR, title und targetBranch nur zum Anlegen. Eins von beiden weglassen."
+      }
+      const ref = parsePullRequestUrl(args.prUrl)
+      // Der Token geht nur an die konfigurierte Instanz. Eine PR-URL kommt vom Modell
+      // und kann vertippt oder untergeschoben sein.
+      if (normalizeBaseUrl(ref.baseUrl) !== baseUrl) {
         return [
-          "PR nicht geändert — kein Bitbucket-Token konfiguriert.",
-          "planify mit Token neu installieren und opencode neu starten:",
-          `  ${INSTALL_HINT}`,
-          "Alternativ Umgebungsvariable PLANIFY_BITBUCKET_TOKEN setzen.",
+          `PR nicht geändert — PR-URL zeigt auf ${ref.baseUrl}, konfiguriert ist ${baseUrl}.`,
+          "Der Token wird nur an die konfigurierte Bitbucket-Instanz gesendet.",
         ].join("\n")
       }
-
-      let rendered
+      repo = ref
+      id = ref.id
+    } else {
+      let target: BranchTarget | undefined
+      let remote: string
       try {
-        rendered = renderSummary(args.summary)
-      } catch (error) {
-        return `PR nicht geändert — ${(error as Error).message}`
-      }
-      if (rendered.markdown.length > MAX_DESCRIPTION_LENGTH) {
-        return (
-          `PR nicht geändert — Description wäre ${rendered.markdown.length} Zeichen lang, ` +
-          `Grenze ${MAX_DESCRIPTION_LENGTH}. Zusammenfassung kürzen.`
-        )
-      }
-
-      if (!configuredUrl) {
-        return [
-          "PR nicht geändert — keine Bitbucket-URL konfiguriert.",
-          `planify mit URL neu installieren: ${INSTALL_HINT}`,
-          "Alternativ Umgebungsvariable PLANIFY_BITBUCKET_URL setzen.",
-        ].join("\n")
-      }
-      let baseUrl: string
-      try {
-        baseUrl = normalizeBaseUrl(configuredUrl)
-      } catch {
-        return `PR nicht geändert — Bitbucket-URL ungültig: ${configuredUrl}`
-      }
-
-      const config: BitbucketConfig = { baseUrl, token, fetch: options.fetch, timeoutMs: options.timeoutMs }
-      let repo: RepoRef
-      let id: number
-      try {
-        if (args.prUrl) {
-          if (title || targetBranch) {
-            return "PR nicht geändert — prUrl meint einen bestehenden PR, title und targetBranch nur zum Anlegen. Eins von beiden weglassen."
-          }
-          const ref = parsePullRequestUrl(args.prUrl)
-          // Der Token geht nur an die konfigurierte Instanz. Eine PR-URL kommt vom Modell
-          // und kann vertippt oder untergeschoben sein.
-          if (normalizeBaseUrl(ref.baseUrl) !== baseUrl) {
-            return [
-              `PR nicht geändert — PR-URL zeigt auf ${ref.baseUrl}, konfiguriert ist ${baseUrl}.`,
-              "Der Token wird nur an die konfigurierte Bitbucket-Instanz gesendet.",
-            ].join("\n")
-          }
-          repo = ref
-          id = ref.id
-        } else {
-          let target: BranchTarget | undefined
-          let remote: string
-          try {
-            target = await branchTarget(git, context.directory)
-            if (!target) {
-              return "PR nicht geändert — kein Branch ausgecheckt (detached HEAD). Branch auschecken oder PR-URL angeben."
-            }
-            remote = await git(["remote", "get-url", target.remoteName], context.directory)
-          } catch (error) {
-            return `PR nicht geändert — git-Abfrage fehlgeschlagen: ${(error as Error).message}`
-          }
-          repo = parseRemote(remote)
-          if (targetBranch) {
-            const resolved = await resolveTarget(git, context.directory, target.remoteName, targetBranch)
-            if (!resolved) {
-              return `PR nicht geändert — Ziel-Branch ${targetBranch} gibt es auf ${target.remoteName} nicht (git fetch?).`
-            }
-            targetBranch = resolved
-          }
-          // Erst der lokale Name, dann das Push-Ziel, falls es anders heisst.
-          let branch = target.local
-          let open = await findOpenPullRequests(config, repo, branch)
-          if (open.length === 0 && target.pushBranch && target.pushBranch !== target.local) {
-            branch = target.pushBranch
-            open = await findOpenPullRequests(config, repo, branch)
-          }
-          // Mit bestätigtem Ziel zählt nur der PR dorthin; einer auf ein anderes Ziel bleibt unberührt.
-          if (targetBranch) open = open.filter((pr) => pr.targetBranch === targetBranch)
-          if (open.length === 0) {
-            return await openPullRequest({
-              config,
-              repo,
-              target,
-              git,
-              cwd: context.directory,
-              title,
-              targetBranch,
-              rendered,
-              context,
-            })
-          }
-          if (open.length > 1) {
-            return [
-              `PR nicht geändert — Branch ${branch} hat ${open.length} offene PRs. Benutzer fragen, welcher gemeint ist,`,
-              "dann pr_summary mit prUrl erneut aufrufen:",
-              ...open.map(describePullRequest),
-            ].join("\n")
-          }
-          id = open[0].id
+        target = await branchTarget(git, options.directory)
+        if (!target) {
+          return "PR nicht geändert — kein Branch ausgecheckt (detached HEAD). Branch auschecken oder PR-URL angeben."
         }
-
-        const updated = await setDescription(config, repo, id, rendered.markdown)
-        context.metadata({ title: `PR #${updated.id} — ${updated.title}`, metadata: { url: updated.url } })
-        const lines = [
-          `Description von PR #${updated.id} ersetzt (${repo.projectKey}/${repo.repoSlug} → ${updated.targetBranch}):`,
-          `  ${updated.url}`,
-        ]
-        if (title) lines.push("PR bestand schon, title nicht verwendet.")
-        appendWarnings(lines, rendered.warnings.map((w) => `${w.path}: ${w.message}`))
-        return lines.join("\n")
+        remote = await git(["remote", "get-url", target.remoteName], options.directory)
       } catch (error) {
-        if (error instanceof UncertainOutcomeError) return `Ausgang unklar — ${error.message}`
-        if (error instanceof BitbucketError) return `PR nicht geändert — ${error.message}`
-        throw error
+        return `PR nicht geändert — git-Abfrage fehlgeschlagen: ${(error as Error).message}`
       }
-    },
-  })
+      repo = parseRemote(remote)
+      if (targetBranch) {
+        const resolved = await resolveTarget(git, options.directory, target.remoteName, targetBranch)
+        if (!resolved) {
+          return `PR nicht geändert — Ziel-Branch ${targetBranch} gibt es auf ${target.remoteName} nicht (git fetch?).`
+        }
+        targetBranch = resolved
+      }
+      // Erst der lokale Name, dann das Push-Ziel, falls es anders heisst.
+      let branch = target.local
+      let open = await findOpenPullRequests(config, repo, branch)
+      if (open.length === 0 && target.pushBranch && target.pushBranch !== target.local) {
+        branch = target.pushBranch
+        open = await findOpenPullRequests(config, repo, branch)
+      }
+      // Mit bestätigtem Ziel zählt nur der PR dorthin; einer auf ein anderes Ziel bleibt unberührt.
+      if (targetBranch) open = open.filter((pr) => pr.targetBranch === targetBranch)
+      if (open.length === 0) {
+        return await openPullRequest({
+          config,
+          repo,
+          target,
+          git,
+          cwd: options.directory,
+          title,
+          targetBranch,
+          rendered,
+        })
+      }
+      if (open.length > 1) {
+        return [
+          `PR nicht geändert — Branch ${branch} hat ${open.length} offene PRs. Benutzer fragen, welcher gemeint ist,`,
+          "dann pr_summary mit prUrl erneut aufrufen:",
+          ...open.map(describePullRequest),
+        ].join("\n")
+      }
+      id = open[0].id
+    }
+
+    const updated = await setDescription(config, repo, id, rendered.markdown)
+    const lines = [
+      `Description von PR #${updated.id} ersetzt (${repo.projectKey}/${repo.repoSlug} → ${updated.targetBranch}):`,
+      `  ${updated.url}`,
+    ]
+    if (title) lines.push("PR bestand schon, title nicht verwendet.")
+    appendWarnings(lines, rendered.warnings.map((w) => `${w.path}: ${w.message}`))
+    return { content: lines.join("\n"), metadata: { title: `PR #${updated.id} — ${updated.title}`, url: updated.url } }
+  } catch (error) {
+    if (error instanceof UncertainOutcomeError) return `Ausgang unklar — ${error.message}`
+    if (error instanceof BitbucketError) return `PR nicht geändert — ${error.message}`
+    throw error
+  }
 }
 
 function appendWarnings(lines: string[], warnings: string[]) {
@@ -324,11 +336,10 @@ type OpenRequest = {
   title?: string
   targetBranch?: string
   rendered: ReturnType<typeof renderSummary>
-  context: { metadata(input: { title?: string; metadata?: Record<string, any> }): void }
 }
 
 /** Branch ohne offenen PR: Draft-PR mit der Zusammenfassung anlegen oder sagen, was dazu fehlt. */
-async function openPullRequest(req: OpenRequest): Promise<string> {
+async function openPullRequest(req: OpenRequest): Promise<string | Result> {
   const { config, repo, target, title, targetBranch } = req
   const source = target.pushBranch ?? target.local
   const where = `${repo.projectKey}/${repo.repoSlug}`
@@ -382,7 +393,6 @@ async function openPullRequest(req: OpenRequest): Promise<string> {
     toBranch: targetBranch,
     reviewers,
   })
-  req.context.metadata({ title: `PR #${created.id} — ${created.title}`, metadata: { url: created.url } })
   if (created.draft !== true) {
     warnings.push("Als normaler PR angelegt, nicht als Draft: die Instanz kennt keine Drafts (ab 8.18).")
   }
@@ -392,5 +402,5 @@ async function openPullRequest(req: OpenRequest): Promise<string> {
     `Reviewer: ${created.reviewers.map((r) => r.user.name).join(", ") || "keine"}`,
   ]
   appendWarnings(lines, [...warnings, ...req.rendered.warnings.map((w) => `${w.path}: ${w.message}`)])
-  return lines.join("\n")
+  return { content: lines.join("\n"), metadata: { title: `PR #${created.id} — ${created.title}`, url: created.url } }
 }

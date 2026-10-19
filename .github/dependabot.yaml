@@ -14,11 +14,11 @@ updates:
         update-types:
           - minor
           - patch
-    # @opencode-ai/plugin folgt der Version des OpenCode-Binaries. Ein Bump
+    # @opencode/plugin folgt der Version des OpenCode-Binaries. Ein Bump
     # hier heisst nicht, dass das lokal installierte Binary mitgezogen ist,
     # deshalb nie automatisch mergen.
     ignore:
-      - dependency-name: '@opencode-ai/plugin'
+      - dependency-name: '@opencode/plugin'
         update-types:
           - version-update:semver-major
     labels:

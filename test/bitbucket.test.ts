@@ -104,7 +104,7 @@ function fakeGit(answers: Record<string, string | null>) {
 
 function runTool(
   args: { summary: string; prUrl?: string; title?: string; targetBranch?: string },
-  options: Parameters<typeof createPrSummaryTool>[0],
+  options: Partial<Parameters<typeof createPrSummaryTool>[0]>,
   // Ganzer Aufruf vor "befehl option" vor "befehl"; null lässt den Aufruf scheitern.
   git: Record<string, string | null> = {
     "rev-parse": "feature/SEP-1-x",
@@ -113,14 +113,14 @@ function runTool(
   },
 ) {
   const tool = createPrSummaryTool({
+    directory: "/projekt",
     bitbucketUrl: BASE,
     bitbucketToken: "geheim",
     env: {},
     git: fakeGit(git),
     ...options,
   })
-  const context = { directory: "/projekt", metadata: () => {} } as never
-  return tool.execute(args as never, context) as Promise<string>
+  return tool.execute(args as never, {} as never).then((result) => result.content as string)
 }
 
 test("Remote-URL ergibt Projekt und Repository für https, ssh und persönliche Repos", () => {
@@ -521,6 +521,7 @@ test("'Created from HEAD' nimmt die Basis aus dem Reflog von HEAD", async () => 
     ].join("\n"),
   }
   const tool = createPrSummaryTool({
+    directory: "/p",
     bitbucketUrl: BASE,
     bitbucketToken: "t",
     env: {},
@@ -529,7 +530,7 @@ test("'Created from HEAD' nimmt die Basis aus dem Reflog von HEAD", async () => 
   })
 
   // When
-  const result = (await tool.execute({ summary: SUMMARY } as never, { directory: "/p", metadata: () => {} } as never)) as string
+  const result = (await tool.execute({ summary: SUMMARY } as never, {} as never)).content as string
 
   // Then
   assert.match(result, /Vorschlag Ziel: release-2\.3/)

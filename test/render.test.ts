@@ -186,16 +186,54 @@ test("Web-Font-Import aus einem diagram-design-Export wird entfernt", () => {
 
 test("Plugin registriert die Tools plan_render und pr_summary", async () => {
   // Given
-  const { PlanifyPlugin } = await import("../src/plugin.ts")
+  const { default: plugin } = await import("../src/index.ts")
+  const added: { name: string; description: string; input: { type: string } }[] = []
+  const ctx = {
+    location: { directory: "/projekt" },
+    options: { openWith: "firefox" },
+    tool: { transform: async (callback: (editor: unknown) => void) => callback({ add: (t: never) => added.push(t) }) },
+  }
 
   // When
-  const hooks = await PlanifyPlugin({} as never)
+  await plugin.setup(ctx as never)
 
   // Then
-  assert.ok(hooks.tool)
-  assert.deepEqual(Object.keys(hooks.tool), ["plan_render", "pr_summary"])
-  assert.match(hooks.tool.plan_render.description, /Plan/)
-  assert.match(hooks.tool.pr_summary.description, /Description/)
+  assert.equal(plugin.id, "opencode-planify-german")
+  assert.deepEqual(added.map((t) => t.name), ["plan_render", "pr_summary"])
+  assert.match(added[0].description, /Plan/)
+  assert.match(added[1].description, /Description/)
+  assert.ok(added.every((t) => t.input.type === "object"))
+})
+
+test("plan_render schreibt JSON und HTML ins Projektverzeichnis", async () => {
+  // Given
+  const { createPlanRenderTool } = await import("../src/tool.ts")
+  const directory = mkdtempSync(resolve(tmpdir(), "planify-tool-"))
+  const tool = createPlanRenderTool({ directory })
+
+  // When
+  const result = await tool.execute({ plan: example(), open: false }, {} as never)
+
+  // Then
+  const name = baseName(example())
+  assert.match(result.content as string, /^Plan geschrieben:/)
+  assert.ok(existsSync(resolve(directory, "docs/plans", `${name}.plan.json`)))
+  assert.ok(existsSync(resolve(directory, "docs/plans", `${name}.html`)))
+  assert.equal(result.metadata?.htmlPath, resolve(directory, "docs/plans", `${name}.html`))
+})
+
+test("plan_render meldet Schemaverletzungen, ohne zu schreiben", async () => {
+  // Given
+  const { createPlanRenderTool } = await import("../src/tool.ts")
+  const directory = mkdtempSync(resolve(tmpdir(), "planify-tool-"))
+  const tool = createPlanRenderTool({ directory })
+
+  // When
+  const result = await tool.execute({ plan: { ...example(), verification: [] }, open: false }, {} as never)
+
+  // Then
+  assert.match(result.content as string, /^Plan nicht geschrieben — Schema verletzt:/)
+  assert.ok(!existsSync(resolve(directory, "docs/plans")))
 })
 
 test("Schema und Templates liegen unter der Paketwurzel", () => {

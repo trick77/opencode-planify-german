@@ -1,24 +1,34 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 import { createPlanRenderTool } from "./tool.ts"
 import { createPrSummaryTool } from "./tool-pr.ts"
 
 const stringOption = (value: unknown) => (typeof value === "string" ? value : undefined)
 
 /**
- * Registriert die Tools `plan_render` und `pr_summary`. Damit ist planify über den
- * `plugin`-Eintrag in opencode.json installierbar, ohne Symlink in
- * ~/.config/opencode/tool.
+ * Registriert die Tools `plan_render` und `pr_summary` (Plugin-API von opencode 2).
+ * Installiert wird über den `plugins`-Eintrag in opencode.json.
  *
  * Optionen: `openWith` überschreibt das Kommando zum Öffnen der Plan-Datei, ohne
  * Angabe gewinnt der Standard-Handler des Systems (open, xdg-open, start).
  * `bitbucketUrl` und `bitbucketToken` braucht `pr_summary`.
+ *
+ * Relative Pfade und git-Abfragen gelten ab dem Verzeichnis, in dem opencode das
+ * Plugin lädt (`ctx.location.directory`); der Tool-Aufruf selbst kennt keins.
  */
-export const PlanifyPlugin: Plugin = async (_input, options) => ({
-  tool: {
-    plan_render: createPlanRenderTool({ openWith: stringOption(options?.openWith) }),
-    pr_summary: createPrSummaryTool({
-      bitbucketUrl: stringOption(options?.bitbucketUrl),
-      bitbucketToken: stringOption(options?.bitbucketToken),
-    }),
+export default Plugin.define({
+  id: "opencode-planify-german",
+  async setup(ctx) {
+    const { directory } = ctx.location
+    const planRender = createPlanRenderTool({ directory, openWith: stringOption(ctx.options.openWith) })
+    const prSummary = createPrSummaryTool({
+      directory,
+      bitbucketUrl: stringOption(ctx.options.bitbucketUrl),
+      bitbucketToken: stringOption(ctx.options.bitbucketToken),
+    })
+    // Transforms spielt opencode wiederholt ab: die Tools darum vorher bauen, hier nur eintragen.
+    await ctx.tool.transform((editor) => {
+      editor.add(planRender)
+      editor.add(prSummary)
+    })
   },
 })
