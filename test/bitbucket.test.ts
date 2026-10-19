@@ -104,7 +104,7 @@ function fakeGit(answers: Record<string, string | null>) {
 
 function runTool(
   args: { summary: string; prUrl?: string; title?: string; targetBranch?: string },
-  options: Parameters<typeof createPrSummaryTool>[0],
+  options: Partial<Parameters<typeof createPrSummaryTool>[0]>,
   // Ganzer Aufruf vor "befehl option" vor "befehl"; null lässt den Aufruf scheitern.
   git: Record<string, string | null> = {
     "rev-parse": "feature/SEP-1-x",
@@ -113,14 +113,14 @@ function runTool(
   },
 ) {
   const tool = createPrSummaryTool({
+    directory: () => "/projekt",
     bitbucketUrl: BASE,
     bitbucketToken: "geheim",
     env: {},
     git: fakeGit(git),
     ...options,
   })
-  const context = { directory: "/projekt", metadata: () => {} } as never
-  return tool.execute(args as never, context) as Promise<string>
+  return tool.execute(args as never, {} as never).then((result) => result.content as string)
 }
 
 test("Remote-URL ergibt Projekt und Repository für https, ssh und persönliche Repos", () => {
@@ -198,6 +198,69 @@ test("Bitbucket ohne Antwort bricht nach dem Timeout ab", async () => {
 
   // When / Then
   await assert.rejects(getPullRequest(config, { projectKey: "PROJ", repoSlug: "app" }, 7), /antwortet nicht innerhalb von 0.05 s/)
+})
+
+test("Abbruch der Sitzung bricht die Bitbucket-Anfrage ab, ohne Timeout-Meldung", async () => {
+  // Given
+  const hanging = ((_url: string, init: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      const keepAlive = setInterval(() => {}, 1000)
+      init.signal?.addEventListener("abort", () => {
+        clearInterval(keepAlive)
+        reject(init.signal!.reason)
+      })
+    })) as typeof fetch
+  const controller = new AbortController()
+  const tool = createPrSummaryTool({
+    directory: () => "/projekt",
+    bitbucketUrl: BASE,
+    bitbucketToken: "t",
+    env: {},
+    fetch: hanging,
+    git: fakeGit({
+      "rev-parse": "feature/SEP-1-x",
+      "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-x",
+      remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
+    }),
+  })
+
+  // When
+  const pending = tool.execute({ summary: SUMMARY } as never, { signal: controller.signal } as never)
+  setTimeout(() => controller.abort(), 20)
+
+  // Then
+  await assert.rejects(pending, (error: Error) => error.name === "AbortError" && !/innerhalb/.test(error.message))
+})
+
+test("pr_summary fragt git im Verzeichnis der aufrufenden Sitzung", async () => {
+  // Given
+  const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-x")])
+  const cwds: string[] = []
+  const answers = fakeGit({
+    "rev-parse": "feature/SEP-1-x",
+    "for-each-ref": "origin\0refs/remotes/origin/feature/SEP-1-x",
+    remote: "ssh://git@bitbucket.example.com:7999/proj/app.git",
+  })
+  const tool = createPrSummaryTool({
+    directory: (context) => `/worktrees/${context.sessionID}`,
+    bitbucketUrl: BASE,
+    bitbucketToken: "t",
+    env: {},
+    fetch: bitbucket.fetch,
+    git: (gitArgs, cwd) => {
+      cwds.push(cwd)
+      return answers(gitArgs)
+    },
+  })
+
+  // When
+  const result = await tool.execute({ summary: SUMMARY } as never, { sessionID: "ses_b" } as never)
+
+  // Then
+  assert.match(result.content as string, /Description von PR #7 ersetzt/)
+  assert.equal(result.metadata?.title, "PR #7 — PR 7")
+  assert.ok(cwds.length > 0)
+  assert.ok(cwds.every((cwd) => cwd === "/worktrees/ses_b"))
 })
 
 test("PR-Suche nimmt das Push-Ziel, wenn der lokale Branch anders heisst", async () => {
@@ -521,6 +584,7 @@ test("'Created from HEAD' nimmt die Basis aus dem Reflog von HEAD", async () => 
     ].join("\n"),
   }
   const tool = createPrSummaryTool({
+    directory: () => "/p",
     bitbucketUrl: BASE,
     bitbucketToken: "t",
     env: {},
@@ -529,7 +593,7 @@ test("'Created from HEAD' nimmt die Basis aus dem Reflog von HEAD", async () => 
   })
 
   // When
-  const result = (await tool.execute({ summary: SUMMARY } as never, { directory: "/p", metadata: () => {} } as never)) as string
+  const result = (await tool.execute({ summary: SUMMARY } as never, {} as never)).content as string
 
   // Then
   assert.match(result, /Vorschlag Ziel: release-2\.3/)

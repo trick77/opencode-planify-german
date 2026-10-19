@@ -1,131 +1,116 @@
 import { spawn } from "node:child_process"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { tool } from "@opencode-ai/plugin"
+import type { Info, ToolContext } from "@opencode/plugin/promise/tool"
 import { buildOpenCommand } from "./open.ts"
-import { baseName, render, validate } from "./render.ts"
+import { baseName, render, schemaPath, validate } from "./render.ts"
 
-const z = tool.schema
+// Das Eingabeschema für opencode kommt aus skills/planify/schema/plan.schema.json, der
+// einzigen Quelle. Davon bleiben nur Struktur und Beschreibungen (type, properties,
+// items, description) für das Modell; required, pattern, minItems und Co. fallen weg.
+// opencode prüft die Eingabe vor execute und lehnt sonst mit englischer Sammelmeldung
+// ab, bevor ajv die deutschen Feldfehler liefern kann.
+type JsonSchema = { [key: string]: unknown }
 
-// Die verbindliche Prüfung macht ajv gegen skills/planify/schema/plan.schema.json.
-// Diese zod-Form beschreibt dem Modell nur die Struktur.
-const fileEntry = z.object({
-  path: z.string().describe("Pfad relativ zum Projekt, z. B. src/render.ts"),
-  change: z.string().describe("Was in dieser Datei passiert, ein Satz"),
-})
-
-const planShape = z.object({
-  ticket: z.string().describe("Ticket-Key aus dem Branch, Muster [A-Z][A-Z0-9]+-[0-9]+"),
-  slug: z.string().describe("Kurztitel in Kebab-Case, ASCII ohne Umlaute (nur für den Dateinamen)"),
-  title: z.string().describe("Titel des Vorhabens, deutsch"),
-  intent: z.string().describe("Ein Absatz: was gemacht wird und warum"),
-  context: z
-    .object({ problem: z.string(), outcome: z.string() })
-    .optional()
-    .describe("problem: was heute schiefgeht. outcome: Zustand nach der Umsetzung"),
-  steps: z
-    .array(
-      z.object({
-        title: z.string(),
-        rationale: z.string().optional().describe("Warum der Schritt nötig ist. Nur wenn nicht offensichtlich"),
-        files: z.array(fileEntry).describe("Mindestens eine Datei mit exaktem Pfad"),
-        commands: z.array(z.string()).optional(),
-      }),
+export function loosenSchema(schema: JsonSchema): JsonSchema {
+  const loose: JsonSchema = {}
+  if (schema.type !== undefined) loose.type = schema.type
+  if (typeof schema.description === "string") loose.description = schema.description
+  if (schema.properties && typeof schema.properties === "object") {
+    loose.properties = Object.fromEntries(
+      Object.entries(schema.properties as Record<string, JsonSchema>).map(([name, child]) => [name, loosenSchema(child)]),
     )
-    .describe("Umsetzungsschritte in Reihenfolge"),
-  verification: z
-    .array(z.object({ how: z.string(), expected: z.string() }))
-    .describe("Ende-zu-Ende-Prüfung: how (Kommando oder Handgriff), expected (woran man Erfolg erkennt)"),
-  risks: z.array(z.object({ risk: z.string(), mitigation: z.string() })).optional(),
-  openDecisions: z
-    .array(z.object({ question: z.string(), recommendation: z.string(), tradeoff: z.string() }))
-    .optional()
-    .describe("Offene Entscheidungen des Benutzers, mit Empfehlung und Abwägung. Nie still im Text entscheiden"),
-  outOfScope: z.array(z.string()).optional(),
-  diagram: z
-    .object({ title: z.string(), caption: z.string().optional(), svgPath: z.string() })
-    .optional()
-    .describe("Nur wenn ein Diagramm Struktur zeigt, die die Prosa nicht trägt. SVG per Skill diagram-design erzeugen, Pfad hier eintragen, wird inline eingebettet"),
-  meta: z
-    .object({
-      createdAt: z.string().describe("ISO-8601 Zeitstempel"),
-      model: z.string().optional(),
-      branch: z.string().optional(),
-      repo: z.string().optional(),
-    })
-    .describe("Metadaten des Plans"),
-})
+  }
+  if (schema.items && typeof schema.items === "object") loose.items = loosenSchema(schema.items as JsonSchema)
+  return loose
+}
+
+const planShape = {
+  ...loosenSchema(JSON.parse(readFileSync(schemaPath, "utf8"))),
+  description: "Vollständiger Plan. Feldnamen englisch, Inhalte deutsch",
+}
+
+/** Liefert pro Tool-Aufruf das Verzeichnis der Sitzung; relative Pfade gelten ab dort. */
+export type DirectoryResolver = (context: ToolContext) => string | Promise<string>
+
+type RenderInput = { plan: unknown; outDir?: string; open?: boolean }
 
 export type RenderToolOptions = {
   /** Öffnen-Kommando überschreiben, z. B. "firefox". Standard: Handler des Systems. */
   openWith?: string
+  /** Verzeichnis der Sitzung pro Aufruf; relative Pfade (outDir, svgPath) gelten ab dort. */
+  directory: DirectoryResolver
 }
 
 /**
  * Baut das Tool `plan_render`. Als Fabrik, damit das Plugin seine Optionen
- * (etwa ein abweichendes Öffnen-Kommando) hineingeben kann.
+ * (etwa ein abweichendes Öffnen-Kommando) und die Auflösung des Sitzungsverzeichnisses hineingeben kann.
  */
-export function createPlanRenderTool(options: RenderToolOptions = {}) {
-  return tool({
-  description:
-    "Rendert einen Plan aus JSON zu einer eigenständigen HTML-Datei und öffnet sie im Standard-Browser. " +
-    "Einziger Weg, einen Plan auszugeben: nie HTML oder Markdown selbst schreiben. " +
-    "Nicht schemakonform → nichts geschrieben, Feldfehler kommen zurück, korrigieren und erneut aufrufen. " +
-    "Felder und Schreibregeln: Skill \"planify\".",
-  args: {
-    plan: planShape.describe("Vollständiger Plan. Feldnamen englisch, Inhalte deutsch"),
-    outDir: z
-      .string()
-      .optional()
-      .describe("Zielverzeichnis, Standard docs/plans im Projekt"),
-    open: z.boolean().optional().describe("HTML im Standard-Browser öffnen, Standard true"),
-  },
-  async execute(args, context) {
-    const plan = args.plan as any
-    const errors = validate(plan)
-    if (errors.length) {
-      return [
-        "Plan nicht geschrieben — Schema verletzt:",
-        ...errors.map((f) => `  ${f.path || "/"}: ${f.message}`),
-        "",
-        "Felder korrigieren und plan_render erneut aufrufen.",
-      ].join("\n")
-    }
+export function createPlanRenderTool(options: RenderToolOptions): Info {
+  return {
+    name: "plan_render",
+    description:
+      "Rendert einen Plan aus JSON zu einer eigenständigen HTML-Datei und öffnet sie im Standard-Browser. " +
+      "Einziger Weg, einen Plan auszugeben: nie HTML oder Markdown selbst schreiben. " +
+      "Nicht schemakonform → nichts geschrieben, Feldfehler kommen zurück, korrigieren und erneut aufrufen. " +
+      "Felder und Schreibregeln: Skill \"planify\".",
+    // Ohne required: auch ein fehlender Plan geht an ajv und kommt als deutscher Feldfehler zurück.
+    input: {
+      type: "object",
+      properties: {
+        plan: planShape,
+        outDir: { type: "string", description: "Zielverzeichnis, Standard docs/plans im Projekt" },
+        open: { type: "boolean", description: "HTML im Standard-Browser öffnen, Standard true" },
+      },
+    },
+    async execute(input, context) {
+      const args = input as RenderInput
+      const directory = await options.directory(context)
+      const plan = args.plan as any
+      const errors = validate(plan)
+      if (errors.length) {
+        return {
+          content: [
+            "Plan nicht geschrieben — Schema verletzt:",
+            ...errors.map((f) => `  ${f.path || "/"}: ${f.message}`),
+            "",
+            "Felder korrigieren und plan_render erneut aufrufen.",
+          ].join("\n"),
+        }
+      }
 
-    const targetDir = resolve(context.directory, args.outDir ?? "docs/plans")
-    mkdirSync(targetDir, { recursive: true })
-    const name = baseName(plan)
-    const jsonPath = resolve(targetDir, `${name}.plan.json`)
-    const htmlPath = resolve(targetDir, `${name}.html`)
+      const targetDir = resolve(directory, args.outDir ?? "docs/plans")
+      mkdirSync(targetDir, { recursive: true })
+      const name = baseName(plan)
+      const jsonPath = resolve(targetDir, `${name}.plan.json`)
+      const htmlPath = resolve(targetDir, `${name}.html`)
 
-    let result
-    try {
-      result = render(plan, { baseDir: context.directory })
-    } catch (renderError) {
-      return `Plan nicht geschrieben — Rendern fehlgeschlagen: ${(renderError as Error).message}`
-    }
+      let result
+      try {
+        result = render(plan, { baseDir: directory })
+      } catch (renderError) {
+        return { content: `Plan nicht geschrieben — Rendern fehlgeschlagen: ${(renderError as Error).message}` }
+      }
 
-    writeFileSync(jsonPath, JSON.stringify(plan, null, 2) + "\n", "utf8")
-    writeFileSync(htmlPath, result.html, "utf8")
+      writeFileSync(jsonPath, JSON.stringify(plan, null, 2) + "\n", "utf8")
+      writeFileSync(htmlPath, result.html, "utf8")
 
-    const openCommand = args.open === false ? undefined : buildOpenCommand(htmlPath, options)
-    if (openCommand) {
-      spawn(openCommand.command, openCommand.args, { stdio: "ignore", detached: true }).unref()
-    }
+      const openCommand = args.open === false ? undefined : buildOpenCommand(htmlPath, options)
+      if (openCommand) {
+        spawn(openCommand.command, openCommand.args, { stdio: "ignore", detached: true }).unref()
+      }
 
-    context.metadata({ title: `${plan.ticket} — ${plan.title}`, metadata: { jsonPath, htmlPath } })
-
-    const lines = [`Plan geschrieben:`, `  ${jsonPath}`, `  ${htmlPath}`]
-    if (openCommand) lines.push(`Im Standard-Browser geöffnet (${openCommand.command}).`)
-    else if (args.open !== false) lines.push("Kein Öffnen-Kommando für diese Plattform, Datei bitte selbst öffnen.")
-    if (result.warnings.length) {
-      lines.push("", "Warnungen zur Schreibweise (bitte im nächsten Zug korrigieren und neu rendern):")
-      for (const w of result.warnings) lines.push(`  ${w.path}: ${w.message}`)
-    }
-    return lines.join("\n")
-  },
-  })
+      const lines = [`Plan geschrieben:`, `  ${jsonPath}`, `  ${htmlPath}`]
+      if (openCommand) lines.push(`Im Standard-Browser geöffnet (${openCommand.command}).`)
+      else if (args.open !== false) lines.push("Kein Öffnen-Kommando für diese Plattform, Datei bitte selbst öffnen.")
+      if (result.warnings.length) {
+        lines.push("", "Warnungen zur Schreibweise (bitte im nächsten Zug korrigieren und neu rendern):")
+        for (const w of result.warnings) lines.push(`  ${w.path}: ${w.message}`)
+      }
+      return {
+        content: lines.join("\n"),
+        metadata: { title: `${plan.ticket} — ${plan.title}`, jsonPath, htmlPath },
+      }
+    },
+  }
 }
-
-/** Standard-Instanz für den Installationsweg über das Tool-Verzeichnis. */
-export const planRenderTool = createPlanRenderTool()

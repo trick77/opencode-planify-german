@@ -31,6 +31,8 @@ export type BitbucketConfig = {
   fetch?: typeof fetch
   /** Millisekunden pro Anfrage inklusive Antwort-Body. Standard REQUEST_TIMEOUT_MS. */
   timeoutMs?: number
+  /** Abbruch von aussen, etwa wenn der Benutzer die opencode-Sitzung stoppt. */
+  signal?: AbortSignal
 }
 
 // Ohne Grenze hängt pr_summary und damit die opencode-Sitzung, wenn Bitbucket die
@@ -139,7 +141,8 @@ async function requestWithHeaders(
   const url = config.baseUrl + path
   const doFetch = config.fetch ?? fetch
   const timeoutMs = config.timeoutMs ?? REQUEST_TIMEOUT_MS
-  const signal = AbortSignal.timeout(timeoutMs)
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = config.signal ? AbortSignal.any([timeout, config.signal]) : timeout
   let response: Response
   let text: string
   try {
@@ -155,7 +158,9 @@ async function requestWithHeaders(
     })
     text = await response.text()
   } catch (error) {
-    if (signal.aborted) {
+    // Abbruch durch den Benutzer: unverändert weiterreichen, opencode beendet den Aufruf.
+    if (config.signal?.aborted) throw error
+    if (timeout.aborted) {
       throw new BitbucketError(
         `Bitbucket antwortet nicht innerhalb von ${timeoutMs / 1000} s (${config.baseUrl}).`,
         undefined,

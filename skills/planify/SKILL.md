@@ -29,14 +29,15 @@ als Fliesstext im Chat — sondern abbrechen und im Chat genau das melden:
 npx opencode-presets install opencode-planify-german
 ```
 
-Danach opencode neu starten: Plugins werden beim Start aufgelöst, ein laufender
-Prozess sieht die Installation nicht. Prüfen mit:
+Danach opencode neu starten (`opencode service restart`): Plugins werden beim
+Start aufgelöst, ein laufender Prozess sieht die Installation nicht. Braucht
+opencode 2 oder neuer. Prüfen mit:
 
 ```sh
-opencode debug agent plan | grep plan_render
+opencode plugin list | grep opencode-planify-german
 ```
 
-Bleibt der Treffer aus, ist die Installation das Problem und nicht der Plan. Erst
+Die Liste füllt sich erst einige Sekunden nach dem Neustart. Bleibt der Treffer aus, ist die Installation das Problem und nicht der Plan. Erst
 weitermachen, wenn das Tool da ist.
 
 ## Sprache
