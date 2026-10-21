@@ -158,7 +158,7 @@ export function createPrSummaryTool(options: PrToolOptions): Info {
     name: "pr_summary",
     description:
       "Schreibt eine Zusammenfassung in die Description eines offenen Bitbucket-Data-Center-Pull-Requests und " +
-      "ersetzt sie vollständig: 3-4 Absätze Prosa, getrennt durch eine Leerzeile — Aufgabe, Problem oder " +
+      "ersetzt sie vollständig: 1-3 Absätze Prosa, getrennt durch eine Leerzeile — Aufgabe, Problem oder " +
       "Herausforderung, Lösung. Keine Überschriften, keine Listen; den Umbruch macht das Tool. Nie als Kommentar. " +
       "Hat der aktuelle Branch keinen offenen PR, legt das Tool mit title und targetBranch einen Draft-PR mit " +
       "dieser Description und den Default-Reviewern an; ohne die beiden liefert es einen Ziel-Vorschlag, den der " +
@@ -169,7 +169,7 @@ export function createPrSummaryTool(options: PrToolOptions): Info {
       properties: {
         summary: {
           type: "string",
-          description: "3-4 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung",
+          description: "1-3 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung",
         },
         prUrl: {
           type: "string",

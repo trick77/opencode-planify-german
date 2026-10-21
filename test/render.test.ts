@@ -385,19 +385,19 @@ test("Zusammenfassung escapt nur dokumentierte Zeichen, ein Absatz wird eine Zei
   )
 })
 
-test("Zusammenfassung braucht 3-4 Absätze und bricht bei 110 Zeichen um", () => {
+test("Zusammenfassung braucht 1-3 Absätze und bricht bei 110 Zeichen um", () => {
   // Given
   const paragraph = Array.from({ length: 40 }, (_, i) => `wort${i}`).join(" ")
   const paragraphs = (n: number) => Array.from({ length: n }, () => paragraph).join("\n\n  \n")
 
   // When
-  const { markdown } = renderSummary(paragraphs(4))
+  const { markdown } = renderSummary(paragraphs(3))
 
   // Then
-  assert.throws(() => renderSummary(paragraphs(2)), /2 Absätze, erlaubt 3-4/)
-  assert.throws(() => renderSummary(paragraphs(5)), /5 Absätze, erlaubt 3-4/)
-  assert.doesNotThrow(() => renderSummary(paragraphs(3)))
-  assert.equal(markdown.trimEnd().split("\n\n").length, 4)
+  assert.throws(() => renderSummary(paragraphs(0)), /0 Absätze, erlaubt 1-3/)
+  assert.throws(() => renderSummary(paragraphs(4)), /4 Absätze, erlaubt 1-3/)
+  assert.doesNotThrow(() => renderSummary(paragraphs(1)))
+  assert.equal(markdown.trimEnd().split("\n\n").length, 3)
   assert.ok(markdown.split("\n").every((line) => line.length <= WRAP_WIDTH))
   assert.ok(markdown.split("\n").length > 8)
 })

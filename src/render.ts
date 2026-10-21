@@ -246,12 +246,12 @@ export function wrapProse(markdown: string, width = WRAP_WIDTH, listWidth = LIST
 
 export type MarkdownResult = { markdown: string; warnings: PlanWarning[] }
 
-export const MIN_PARAGRAPHS = 3
-export const MAX_PARAGRAPHS = 4
+export const MIN_PARAGRAPHS = 1
+export const MAX_PARAGRAPHS = 3
 
 /**
  * Rendert die Zusammenfassung für die Description eines Bitbucket-Data-Center-PRs:
- * 3-4 Absätze Prosa, je einer escapt auf einer Zeile, danach umbrochen. Keine
+ * 1-3 Absätze Prosa, je einer escapt auf einer Zeile, danach umbrochen. Keine
  * Überschriften, Listen oder Codeblöcke.
  */
 export function renderSummary(summary: string): MarkdownResult {

@@ -111,7 +111,7 @@ der Branch gepusht, bietet das Modell es einmal an; geschrieben wird erst nach J
 
 | Argument | Pflicht | Inhalt |
 | --- | --- | --- |
-| `summary` | ja | 3-4 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung. |
+| `summary` | ja | 1-3 Absätze Prosa, getrennt durch eine Leerzeile: Aufgabe, Problem oder Herausforderung, Lösung. |
 | `prUrl` | nein | PR-URL aus dem Browser. Nur bei mehreren offenen PRs oder einem PR ausserhalb des aktuellen Branches. |
 | `title` | zum Anlegen | Titel des neuen PRs. Bei bestehendem PR ignoriert. |
 | `targetBranch` | zum Anlegen | Ziel-Branch, vom Benutzer bestätigt. Nie raten. |
@@ -122,7 +122,7 @@ Benutzer fragen, ob der Vorschlag gilt bzw. welches Ziel, dann mit `title` und
 `targetBranch` erneut aufrufen. Default-Reviewer setzt das Tool selbst. Aus
 master/main oder einem ungepushten Branch legt es nichts an.
 
-Weniger als 3 oder mehr als 4 Absätze lehnt das Tool ab, ohne Bitbucket
+Mehr als 3 Absätze oder eine leere Zusammenfassung lehnt das Tool ab, ohne Bitbucket
 anzufassen. Escapt und bei 110 Zeichen umbrochen wird im Tool. Bei bestehendem PR
 wird die Description vollständig ersetzt, Titel und Reviewer bleiben. Nie ein
 Kommentar.
