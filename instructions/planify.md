@@ -99,7 +99,7 @@ dazugekommen (neuer Teil der Lösung, geänderter Ansatz — nicht Fixes oder
 Review-Kleinkram), von dir aus einmal anbieten: "Die PR-Description ist veraltet,
 soll ich sie aktualisieren?" Erst nach Ja.
 
-- Inhalt: 3-4 Absätze Prosa, getrennt durch eine Leerzeile. Aufgabe, Problem
+- Inhalt: 1-3 Absätze Prosa, getrennt durch eine Leerzeile. Aufgabe, Problem
   oder Herausforderung, Lösung — die umgesetzte, nicht die geplante. Nicht der
   Plan, keine Schrittliste, keine Überschriften, keine Listen.
 - Absätze auf einer Zeile übergeben, den Umbruch macht das Tool.

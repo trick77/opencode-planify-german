@@ -722,18 +722,18 @@ test("detached HEAD ändert nichts", async () => {
 test("falsche Absatzzahl oder zu lange Zusammenfassung erreicht Bitbucket nicht", async () => {
   // Given
   const bitbucket = fakeBitbucket([pullRequest(7, "feature/SEP-1-x")])
-  const tooFew = "Erster Absatz.\n\nZweiter Absatz."
-  const tooMany = "A.\n\nB.\n\nC.\n\nD.\n\nE."
+  const empty = "  \n\n  "
+  const tooMany = "A.\n\nB.\n\nC.\n\nD."
   const tooLong = SUMMARY + " " + "x".repeat(MAX_DESCRIPTION_LENGTH)
 
   // When
   const results = await Promise.all(
-    [tooFew, tooMany, tooLong].map((summary) => runTool({ summary }, { fetch: bitbucket.fetch })),
+    [empty, tooMany, tooLong].map((summary) => runTool({ summary }, { fetch: bitbucket.fetch })),
   )
 
   // Then
-  assert.match(results[0], /2 Absätze, erlaubt 3-4/)
-  assert.match(results[1], /5 Absätze, erlaubt 3-4/)
+  assert.match(results[0], /0 Absätze, erlaubt 1-3/)
+  assert.match(results[1], /4 Absätze, erlaubt 1-3/)
   assert.match(results[2], /Grenze/)
   assert.equal(bitbucket.calls.length, 0)
 })
