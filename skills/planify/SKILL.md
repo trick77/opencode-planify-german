@@ -1,6 +1,6 @@
 ---
 name: planify
-description: "Pläne als JSON bauen und über das Tool plan_render zu HTML rendern, optional mit Diagramm. Laden, bevor ein Plan, eine Spezifikation, ein Audit oder ein Umsetzungsvorschlag ausgegeben wird — enthält Schema, Feldbedeutungen, Schreibregeln und ein Beispiel."
+description: "Pläne als JSON bauen und über das Tool plan_render zu HTML rendern, mit Diagramm, sobald Entitäten, Abläufe, Zustände oder Architektur berührt sind. Laden, bevor ein Plan, eine Spezifikation, ein Audit oder ein Umsetzungsvorschlag ausgegeben wird — enthält Schema, Feldbedeutungen, Schreibregeln und ein Beispiel."
 compatibility: opencode
 metadata:
   audience: alle Agents
@@ -82,15 +82,33 @@ Renderer warnt bei Verstössen: korrigieren, neu rendern.
 
 ## Diagramm
 
-Nur, wenn es Struktur zeigt, die die Prosa nicht trägt: Abhängigkeiten,
-Datenfluss, Zustände, Reihenfolgen mit Verzweigungen. Lineare Schrittfolge wird
-aufgezählt, nicht gezeichnet.
+Im Zweifel zeichnen. Ein Diagramm gehört in den Plan, sobald der Plan eines
+davon berührt (Typ von `diagram-design` in Klammern):
 
-1. Skill `diagram-design` laden, Diagramm als HTML erzeugen.
-2. Daraus `.svg` exportieren, nach `references/export.md` des Skills
-   `diagram-design`, Abschnitt "SVG export procedure": erstes `<svg>` extrahieren,
-   `xmlns` und `viewBox` sicherstellen, `title`/`desc` erhalten. Nur SVG, kein
-   PNG — Playwright wird nicht gebraucht.
+| Der Plan berührt … | Typ |
+| --- | --- |
+| Entitäten, Tabellen, Beziehungen, ein Datenmodell | `er`, `db-schema`, `uml-class` |
+| Daten, die durch Komponenten oder Systeme fliessen | `data-flow`, `dp-integration` |
+| Ablauf mit Verzweigungen, Fehlerpfaden, Entscheidungen | `flowchart`, `swimlane` |
+| Aufrufe zwischen Diensten, Requests, Events, Nachrichten | `sequence` |
+| Status und Übergänge (Bestellung, Ticket, Workflow) | `state` |
+| Komponenten, Module, Schichten und wie sie zusammenhängen | `architecture`, `layers`, `dependency` |
+| Umbau einer Architektur, vorher und nachher | `architecture-delta` |
+| Wo was läuft: Container, Umgebungen, Netz | `deployment` |
+
+Kein Diagramm nur bei einer rein linearen Schrittfolge ohne Komponenten,
+Entitäten oder Verzweigungen, etwa eine Dependency hochziehen. Die steht schon
+in `steps[]`. Ein Diagramm pro Plan: das, was beim Review am meisten Lesezeit
+spart.
+
+1. Skill `diagram-design` laden, Diagramm als HTML erzeugen. Dessen Stil-Frage
+   beim ersten Diagramm (Onboarding-Gate: "Customize now?") nicht stellen, sondern
+   den Default behalten (Option e), auch ohne `.diagram-design`-Marker im
+   Projekt. Kein Profil speichern. Der Plan soll nicht auf eine Stilfrage warten.
+2. Daraus `.svg` exportieren, mit dem Helfer aus dem Skill-Verzeichnis von
+   `diagram-design`: `python3 scripts/export_svg.py <html> <out.svg> --system-fonts`.
+   Ohne `python3` von Hand nach `references/export.md`, Abschnitt "SVG export
+   procedure". Nur SVG, kein PNG — Playwright wird nicht gebraucht.
 3. Pfad in `diagram.svgPath`, dazu `title` und optional `caption`.
 
 planify entfernt aktive Inhalte (`script`, `on*`) und den von `diagram-design`
@@ -99,8 +117,11 @@ greifen dann die Schriften des Themes. So bleibt die HTML-Datei eigenständig:
 keine Bilddatei daneben, keine CDN-Skripte, keine Web-Fonts, keine entfernten
 Bilder.
 
-Ist `diagram-design` nicht verfügbar, `diagram` weglassen — kein handgeschriebenes
-SVG, keine Mermaid-Blöcke im Plan.
+Wäre ein Diagramm angebracht und `diagram-design` ist nicht verfügbar: `diagram`
+weglassen und im Chat genau einen Satz schreiben: "Diagramm weggelassen: Skill
+`diagram-design` fehlt (`npx opencode-presets install skill-diagram-design`)."
+Nie still weglassen, sonst sieht ein fehlender Skill aus wie ein bewusster
+Verzicht. Kein handgeschriebenes SVG, keine Mermaid-Blöcke im Plan.
 
 ## PR-Description
 

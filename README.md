@@ -50,7 +50,7 @@ Der Installer schreibt für das Plugin den Paket-Spec samt Optionen nach `openco
 {
   "plugins": [
     {
-      "package": "opencode-planify-german@1.0.1",
+      "package": "opencode-planify-german@1.0.2",
       "options": {
         "bitbucketUrl": "https://bitbucket.example.com",
         "bitbucketToken": "…"
@@ -140,18 +140,22 @@ mit `open: false` schreibt die Dateien, ohne etwas zu öffnen.
 
 ## Diagramme
 
-Optional, für Struktur, die die Prosa nicht trägt: Abhängigkeiten, Datenfluss,
-Zustände, Reihenfolgen mit Verzweigungen.
+Im Zweifel mit Diagramm: sobald ein Plan Entitäten, Datenfluss, Abläufe mit
+Verzweigungen, Aufrufe zwischen Diensten, Zustände oder Architektur berührt.
+Nur eine rein lineare Schrittfolge bleibt ohne.
 
 Erzeugt wird das Diagramm mit dem Skill `diagram-design`, als SVG exportiert, der
 Pfad steht im Plan unter `diagram.svgPath`. planify bettet das SVG inline ein und
 entfernt dabei `script`, `on*`-Attribute und den Google-Fonts-Import, damit die
 Plan-Datei offline-fest bleibt.
 
-Auch der Skill kommt über ein Preset. Er liegt in einem fremden Repo ohne Tags,
-deshalb klonst du selbst und gibst den Pfad mit:
+Der Skill kommt mit dem Bundle `planify-german` (Preset `skill-diagram-design`):
+das Archiv eines festen Commits, per sha256 geprüft, entpackt nach
+`<cache>/diagram-design-<version>/skills` und dort in `skills.paths` eingetragen.
+Kein Klon. Upstream hat keine Tags, ein Update ist eine neue Preset-Version mit
+neuem Commit.
 
-```sh
-git clone https://github.com/cathrynlavery/diagram-design.git
-npx opencode-presets install skill-diagram-design --set skillsDir="$PWD/diagram-design/skills"
-```
+Wer den Skill früher als Klon installiert hat, löscht dessen Eintrag aus
+`skills.paths`, sonst ist er doppelt registriert.
+
+Fehlt der Skill, lässt das Modell das Diagramm weg und sagt das im Chat.
