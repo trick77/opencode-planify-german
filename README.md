@@ -36,7 +36,7 @@ Braucht opencode 2 oder neuer: ab 1.0.0 nutzt das Plugin die Plugin-API V2
 Über [opencode-presets](https://github.com/trick77/opencode-presets):
 
 ```sh
-npx opencode-presets install opencode-planify-german
+npx opencode-presets install planify-german
 ```
 
 Das Bundle installiert die drei Teile zusammen: das Plugin mit den Tools
@@ -82,7 +82,7 @@ gelten ab dem Verzeichnis, in dem opencode das Plugin lädt, also dem Projekt.
 Deinstallieren:
 
 ```sh
-npx opencode-presets remove opencode-planify-german
+npx opencode-presets remove planify-german
 ```
 
 ## Ablauf
@@ -122,7 +122,7 @@ ohne Terminal-Eingabe:
 
 ```sh
 export BITBUCKET_TOKEN=…
-npx opencode-presets install opencode-planify-german \
+npx opencode-presets install planify-german \
   --set bitbucketUrl=https://bitbucket.example.com --set-env bitbucketToken=BITBUCKET_TOKEN
 ```
 
@@ -151,7 +151,7 @@ Plan-Datei offline-fest bleibt.
 
 Der Skill kommt mit dem Bundle `planify-german` (Preset `skill-diagram-design`):
 das Archiv eines festen Commits, per sha256 geprüft, entpackt nach
-`<cache>/diagram-design-<version>/skills` und dort in `skills.paths` eingetragen.
+`<cache>/diagram-design-skills-<version>` und dort in `skills.paths` eingetragen.
 Kein Klon. Upstream hat keine Tags, ein Update ist eine neue Preset-Version mit
 neuem Commit.
 

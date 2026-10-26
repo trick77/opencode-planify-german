@@ -26,7 +26,7 @@ installiert. Dann keinen Plan schreiben — weder als HTML noch als Markdown noc
 als Fliesstext im Chat — sondern abbrechen und im Chat genau das melden:
 
 ```sh
-npx opencode-presets install opencode-planify-german
+npx opencode-presets install planify-german
 ```
 
 Danach opencode neu starten (`opencode service restart`): Plugins werden beim
@@ -101,25 +101,35 @@ Entitäten oder Verzweigungen, etwa eine Dependency hochziehen. Die steht schon
 in `steps[]`. Ein Diagramm pro Plan: das, was beim Review am meisten Lesezeit
 spart.
 
-1. Skill `diagram-design` laden, Diagramm als HTML erzeugen. Dessen Stil-Frage
-   beim ersten Diagramm (Onboarding-Gate: "Customize now?") nicht stellen, sondern
-   den Default behalten (Option e), auch ohne `.diagram-design`-Marker im
-   Projekt. Kein Profil speichern. Der Plan soll nicht auf eine Stilfrage warten.
-2. Daraus `.svg` exportieren, mit dem Helfer aus dem Skill-Verzeichnis von
-   `diagram-design`: `python3 scripts/export_svg.py <html> <out.svg> --system-fonts`.
-   Ohne `python3` von Hand nach `references/export.md`, Abschnitt "SVG export
-   procedure". Nur SVG, kein PNG — Playwright wird nicht gebraucht.
-3. Pfad in `diagram.svgPath`, dazu `title` und optional `caption`.
+Der Plan soll nie auf eine Rückfrage von `diagram-design` warten:
+
+1. Skill `diagram-design` laden, Diagramm als HTML nach
+   `docs/plans/<TICKET>-<slug>.diagram.html` schreiben. Die Stil-Frage beim
+   ersten Diagramm (Onboarding-Gate: "Customize now?") nicht stellen. Ein
+   vorhandener `.diagram-design`-Marker oder angepasster Style-Guide gilt; sonst
+   Default (Option e). Kein Profil speichern.
+2. SVG exportieren, ohne zu fragen: der Plan-Auftrag ist der Export-Auftrag
+   (die Regel "Export is manual" von `diagram-design` greift hier nicht). Aus
+   dem Projektverzeichnis, Skript mit absolutem Pfad ins Skill-Verzeichnis:
+   `python3 <skill-dir>/scripts/export_svg.py docs/plans/<TICKET>-<slug>.diagram.html docs/plans/<TICKET>-<slug>.svg --system-fonts`.
+   Nie ins Skill-Verzeichnis schreiben. Nur SVG, kein PNG.
+3. `diagram.svgPath` = `docs/plans/<TICKET>-<slug>.svg` (relativ zum Projekt),
+   dazu `title` und optional `caption`.
+
+Ohne `python3` oder wenn der Export scheitert: `diagram` weglassen und im Chat
+sagen, warum. Den Export nicht von Hand nachbauen, das ergibt unvollständige
+SVGs.
 
 planify entfernt aktive Inhalte (`script`, `on*`) und den von `diagram-design`
 injizierten Google-Fonts-Import und bettet das SVG inline ein; im Diagramm
-greifen dann die Schriften des Themes. So bleibt die HTML-Datei eigenständig:
-keine Bilddatei daneben, keine CDN-Skripte, keine Web-Fonts, keine entfernten
-Bilder.
+greifen dann die Schriften des Themes. So bleibt die Plan-HTML eigenständig:
+sie braucht weder die SVG-Datei daneben noch CDN-Skripte, Web-Fonts oder
+entfernte Bilder.
 
 Wäre ein Diagramm angebracht und `diagram-design` ist nicht verfügbar: `diagram`
 weglassen und im Chat genau einen Satz schreiben: "Diagramm weggelassen: Skill
-`diagram-design` fehlt (`npx opencode-presets install skill-diagram-design`)."
+`diagram-design` fehlt (`npx opencode-presets install skill-diagram-design`,
+danach `opencode service restart`)."
 Nie still weglassen, sonst sieht ein fehlender Skill aus wie ein bewusster
 Verzicht. Kein handgeschriebenes SVG, keine Mermaid-Blöcke im Plan.
 
