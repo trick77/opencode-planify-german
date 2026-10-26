@@ -64,7 +64,7 @@ Plan-Modus und in jedem Projekt.
 
 Fehlt das Tool `plan_render`, ist das Plugin nicht installiert: nicht auf ein
 anderes Format ausweichen, sondern abbrechen und im Chat
-`npx opencode-presets install opencode-planify-german` nennen, dazu den Hinweis,
+`npx opencode-presets install planify-german` nennen, dazu den Hinweis,
 dass opencode danach neu starten muss.
 
 - Feldnamen englisch, Inhalte deutsch, echte Umlaute, kein Eszett.
@@ -77,11 +77,13 @@ dass opencode danach neu starten muss.
   Dateinamen.
 - Offene Entscheidungen nach `openDecisions`, mit Empfehlung und Abwägung. Still
   im Text entschieden heisst: die Wahl wurde nie zur Wahl gestellt.
-- Diagramm nur, wenn es Struktur zeigt, die die Prosa nicht trägt:
-  Abhängigkeiten, Datenfluss, Zustände, Reihenfolgen mit Verzweigungen. Lineare
-  Schrittfolge wird aufgezählt, nicht gezeichnet. Wenn Diagramm: Skill
+- Diagramm im Zweifel ja: Entitäten und Datenmodell, Datenfluss, Abläufe mit
+  Verzweigungen, Aufrufe zwischen Diensten, Zustände, Architektur und ihr Umbau.
+  Weggelassen nur bei rein linearer Schrittfolge. Welcher Typ wofür: Skill
+  `planify`, Abschnitt Diagramm. Wenn Diagramm: Skill
   `diagram-design` nutzen, als `.svg` exportieren, Pfad in `diagram.svgPath` —
-  planify bettet es inline ein.
+  planify bettet es inline ein. Fehlt der Skill: im Chat sagen, dass das
+  Diagramm deshalb fehlt, nicht still weglassen.
 
 ## Zusammenfassung in die PR-Description (Bitbucket Data Center)
 
