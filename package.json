@@ -51,7 +51,7 @@
     "nunjucks": "3.2.4"
   },
   "devDependencies": {
-    "@opencode/plugin": "2.1.4",
+    "@opencode/plugin": "2.2.3",
     "@types/nunjucks": "3.2.6"
   }
 }
